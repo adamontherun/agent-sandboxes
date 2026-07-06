@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 16 &middot; Security Testing Sandbox &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Running vulnerability scanners safely, detonating suspicious samples in isolation, network-blocked analysis environments, forensic snapshot preservation, and guaranteed teardown. Chapter 16 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part V &middot; Real-World Agent Systems.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, malware analysis, security testing, forensic snapshot, network isolation, detonation sandbox, vulnerability scanner">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch16.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 16 &middot; Security Testing Sandbox &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Running vulnerability scanners safely, detonating suspicious samples in isolation, network-blocked analysis environments, forensic snapshot preservation, and guaranteed teardown.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch16.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 16 &middot; Security Testing Sandbox">
+<meta name="twitter:description" content="Running vulnerability scanners safely, detonating suspicious samples in isolation, network-blocked analysis environments, forensic snapshot preservation, and guaranteed teardown.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 16,
+  "name": "Security Testing Sandbox",
+  "description": "Running vulnerability scanners safely, detonating suspicious samples in isolation, network-blocked analysis environments, forensic snapshot preservation, and guaranteed teardown.",
+  "url": "{{PAGES_URL}}chapters/ch16.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch15.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch17.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Networking and Egress Control</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Storage and State</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>File System Isolation</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ol>
+      <p class="part-label">Part IV &middot; Advanced Patterns</p>
+      <ol start="11">
+        <li><a href="ch11.html"><span class="ch-num">11</span>Multi-Tenant Isolation</a></li>
+        <li><a href="ch12.html"><span class="ch-num">12</span>Security Hardening</a></li>
+        <li><a href="ch13.html"><span class="ch-num">13</span>Observability and Debugging</a></li>
+        <li><a href="ch14.html"><span class="ch-num">14</span>Production Patterns</a></li>
+      </ol>
+      <p class="part-label">Part V &middot; Real-World Agent Systems</p>
+      <ol start="15">
+        <li><a href="ch15.html"><span class="ch-num">15</span>AI Coding Assistant Pattern</a></li>
+        <li><a href="ch16.html" class="current"><span class="ch-num">16</span>Security Testing Sandbox</a></li>
+        <li><a href="ch17.html"><span class="ch-num">17</span>Beyond Lambda MicroVMs</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 16</p>
+        <h1>Security Testing Sandbox</h1>
+        <p class="subtitle">Chapter 15 used a MicroVM as a workspace an AI coding assistant drives turn by turn. This chapter uses the same isolation primitives for the opposite purpose: not helping code run successfully, but watching suspicious code run safely &mdash; detonating untrusted samples, scanning for vulnerabilities, observing network behavior, preserving forensic evidence, and guaranteeing that every analysis environment is torn down once the evidence is secure.</p>
+      </header>
+
+      <section id="vulnerability-scanners-and-detonation">
+        <h2>Running Scanners and Detonating Samples Safely</h2>
+
+        <p>A vulnerability scanner or a malware-analysis detonation chamber shares the same core requirement as Chapter 7's code executor: you're running something untrusted, and you need the result without letting the thing being run damage anything outside its boundary. The difference is one of intent. A code executor runs user-submitted code that's <em>probably</em> benign and might occasionally be malicious by accident. A security-testing sandbox runs artifacts that are <em>expected</em> to be malicious, and the whole point is to observe what they try to do.</p>
+
+        <p>The pattern is straightforward once you have the primitives earlier chapters built: launch a dedicated MicroVM per analysis target (one sample per VM, never shared &mdash; Chapter 11's per-tenant isolation argument applies even more strongly here, since cross-contamination between samples would invalidate both analyses), feed the untrusted artifact into it, let it execute under observation, capture what happened, and tear the environment down. What changes from a normal agent sandbox is how the network and lifecycle are configured: stricter egress, more careful evidence preservation, and an even harder guarantee on teardown.</p>
+
+        <p><code>examples/ch16_malware_analysis_pipeline.py</code> demonstrates this end-to-end pipeline. To be explicit about what it is: <strong>this is a local simulation of a MicroVM boundary, not an actual MicroVM.</strong> The <code>AnalysisSandbox</code> class wraps a temp directory and an in-process <code>NetworkPolicy</code> object &mdash; no <code>RunMicrovm</code> call, no Firecracker, no real VM isolation anywhere in the script. The point is to show the pipeline's shape cheaply, before wiring the same shape onto the real API calls Chapters 4-6 covered.</p>
+
+        <p>The "malicious sample" in this example is entirely synthetic and benign: a plain Python function that writes a marker file (simulating a payload drop) and attempts one outbound connection to <code>192.0.2.1</code> (an RFC 5737 TEST-NET-1 address that routes nowhere on the real internet), which the harness intercepts locally and logs as a blocked C2 callback attempt. No real malware appears anywhere.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch16_malware_analysis_pipeline.py &mdash; the synthetic sample</figcaption>
+          <pre><code class="language-python">def synthetic_sample(sandbox: AnalysisSandbox) -&gt; None:
+    """A completely benign synthetic 'sample' that stands in for untrusted code."""
+    # Simulate payload drop
+    marker = sandbox.root / "dropped_payload.marker"
+    marker.write_text("SYNTHETIC_MARKER:not_real_malware\n")
+
+    # Simulate C2 callback attempt (blocked by network policy)
+    sandbox.network.attempt_connection("192.0.2.1:443")</code></pre>
+        </figure>
+
+        <p>Running the full pipeline produces real, captured output showing each phase &mdash; launch, execution, observation, evidence preservation, and teardown:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch16_malware_analysis_pipeline.py &mdash; real output</figcaption>
+          <pre><code class="language-text">=== Pipeline: launching sandbox for sample-001 ===
+  sandbox root: /private/var/folders/.../ch16-analysis-prwupb8s
+  network policy: all egress BLOCKED
+
+=== Pipeline: executing sample ===
+  files created: ['dropped_payload.marker']
+  network attempts: 1 (all blocked)
+    -&gt; 192.0.2.1:443 [BLOCKED]
+
+=== Pipeline: preserving evidence ===
+  artifacts dir: /var/folders/.../ch16-evidence-miqaza82/sample-001
+  artifact hash (SHA-256): e262fc89531ef5a0d9ae9a572567808ea7cf4cf4d1bbfa8aea22ee80b6569e52
+
+=== Pipeline: teardown (guaranteed) ===
+  sandbox was running: True
+  sandbox terminated: True
+
+=== Pipeline: complete ===</code></pre>
+        </figure>
+      </section>
+
+      <section id="network-isolation">
+        <h2>Network Isolation for Malware Analysis</h2>
+
+        <p>Chapter 7 covered egress control for a normal agent sandbox: you launch a MicroVM with the <code>INTERNET_EGRESS</code> network connector to give it outbound internet access, or omit it to block egress entirely. For a coding assistant (Chapter 15), some egress is usually needed &mdash; package installs, API calls, pulling dependencies. For malware analysis, the requirement flips: you almost never want real internet access, because the entire point is to observe what the sample <em>tries</em> to reach without letting it actually get there.</p>
+
+        <p>In a production malware-analysis lab, the standard approach is to pair a fully network-isolated sandbox with a fake-internet simulator &mdash; a service that answers DNS queries, serves fake HTTP responses, accepts SMTP connections, and generally pretends to be the internet from the sample's perspective while logging every request. <a href="https://www.inetsim.org/" target="_blank" rel="noopener">INetSim</a> is the canonical tool for this: it simulates common internet services in a lab environment specifically for analyzing malware network behavior, letting analysts observe C2 callback attempts, download requests, and exfiltration attempts without any traffic leaving the lab network.</p>
+
+        <p>On Lambda MicroVMs, the simplest version of this is launching with no <code>INTERNET_EGRESS</code> connector at all &mdash; the sample's outbound connections fail at the network layer, and you can observe the failure from inside the VM (or from CloudWatch logs, Chapter 13's territory). A more sophisticated setup would route traffic from the MicroVM through a monitoring proxy or an INetSim instance running in a separate MicroVM on the same private network, so you capture not just "it tried to connect" but "it tried to POST these specific bytes to this specific URL." That second pattern is beyond what a single chapter can build end-to-end, but the principle is the same as Chapter 7's egress connector: the network boundary is configured at launch time, not enforced by application code inside the VM.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Real malware-analysis platforms (Cuckoo Sandbox and its successors, commercial sandboxes like Joe Sandbox or ANY.RUN) typically run the fake-internet service on a separate host from the detonation VM, connected by a virtual network bridge the analyst controls. The MicroVM equivalent would be two MicroVMs &mdash; one running the sample, one running INetSim &mdash; connected through a private network with no route to the real internet. The key constraint is that the sample VM must never share an egress path with anything that has real internet access.</p>
+        </aside>
+
+        <p>The example script simulates this at the application level with a <code>NetworkPolicy</code> object whose <code>attempt_connection()</code> method always returns <code>False</code> (blocked) and records the attempt. On a real MicroVM the blocking would happen at the network layer instead, and the recording would come from packet capture or proxy logs rather than an in-process Python object &mdash; but the observable result from the pipeline's perspective is the same: a list of destinations the sample tried to reach, all blocked, all logged.</p>
+      </section>
+
+      <section id="forensic-preservation">
+        <h2>Forensic Snapshot Preservation</h2>
+
+        <p>The worst thing you can do after a suspicious sample runs is tear down the environment immediately. A terminated MicroVM's disk contents are gone &mdash; <code>TerminateMicrovm</code> is final (Chapter 6 covered this). If the sample wrote files, spawned processes, or left any other artifact behind, you need to capture that evidence <em>before</em> termination.</p>
+
+        <p>The pattern is: once analysis completes (or once a suspicious signal fires &mdash; a blocked network attempt, an unexpected file write, a process that shouldn't exist), <strong>suspend first, export second, terminate last.</strong> Chapter 3 and 6 established that a suspended MicroVM preserves its full state &mdash; memory, disk, running processes. That gives you a stable snapshot to export from without racing against a live, possibly still-mutating environment.</p>
+
+        <p>The example script's <code>preserve_evidence()</code> function demonstrates the export-and-hash pattern:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch16_malware_analysis_pipeline.py &mdash; evidence preservation</figcaption>
+          <pre><code class="language-python">def preserve_evidence(
+    sandbox: AnalysisSandbox, sample_id: str, evidence_dir: Path
+) -&gt; AnalysisEvidence:
+    dest = evidence_dir / sample_id
+    dest.mkdir(parents=True, exist_ok=True)
+
+    # Copy all artifacts from the sandbox filesystem
+    files_created = sandbox.list_created_files()
+    for rel_path in files_created:
+        src = sandbox.root / rel_path
+        dst = dest / rel_path
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    # Compute integrity hash over preserved artifacts
+    hasher = hashlib.sha256()
+    for rel_path in sorted(files_created):
+        artifact = dest / rel_path
+        hasher.update(artifact.read_bytes())
+
+    return AnalysisEvidence(
+        sample_id=sample_id,
+        artifacts_dir=str(dest),
+        network_attempts=list(sandbox.network.attempts),
+        files_created=files_created,
+        artifact_hash=hasher.hexdigest(),
+    )</code></pre>
+        </figure>
+
+        <p>The SHA-256 hash over exported artifacts is the simplest form of chain-of-custody integrity: if you later need to prove the evidence hasn't been tampered with (or just confirm that the export captured what you think it captured), the hash computed at export time is your reference. In a real forensics workflow you'd also record a timestamp, the analyst's identity, and store the hash in a tamper-evident log separate from the evidence itself &mdash; but the principle starts here: hash it at the moment you export it, before anything else touches it.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>Chapter 9's filesystem isolation means the artifacts you're exporting are already scoped to the MicroVM's own disk &mdash; there's no risk of accidentally exporting host-system files alongside the sample's output, because the sample never had access to host-system files in the first place. The isolation boundary that protected the host during execution also protects the evidence's integrity during export: what you get out is exactly and only what the sample put in.</p>
+        </aside>
+      </section>
+
+      <section id="guaranteed-teardown">
+        <h2>Automated Teardown After Analysis</h2>
+
+        <p>A MicroVM running a vulnerability scanner or a detonation chamber is itself a liability the moment analysis is done. It contains the artifact you were analyzing, possibly in a partially-executed state, with whatever filesystem and memory modifications the sample made still live. Leaving it running &mdash; or even suspended &mdash; after evidence is preserved is risk with no upside.</p>
+
+        <p>The guarantee this chapter's pipeline pattern enforces is simple: <code>TerminateMicrovm</code> always runs once evidence is preserved, even if something in the analysis or evidence-preservation phase raised an exception. This is the same structural guarantee Chapter 14's production orchestrator used for error recovery (always clean up, even on failure), applied to a context where "failure to clean up" isn't just a resource leak &mdash; it's a live malware-analysis environment sitting unattended.</p>
+
+        <p>The example script structures this as a <code>try/finally</code> block around the entire pipeline:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch16_malware_analysis_pipeline.py &mdash; guaranteed teardown</figcaption>
+          <pre><code class="language-python">    sandbox = AnalysisSandbox()
+    evidence = None
+
+    try:
+        # ... launch, execute sample, observe, preserve evidence ...
+        evidence = preserve_evidence(sandbox, sample_id, evidence_dir)
+    finally:
+        # Guaranteed teardown — TerminateMicrovm must always run, even if
+        # analysis or evidence preservation raises an exception.
+        sandbox.terminate()</code></pre>
+        </figure>
+
+        <p>The <code>finally</code> block is the critical structural choice. Whether the sample ran cleanly, whether it raised an exception, whether evidence preservation failed halfway through &mdash; the sandbox gets terminated regardless. On a real Lambda MicroVM deployment this would be a <code>TerminateMicrovm</code> call in the same position, with the same guarantee: no code path through this function exits without terminating the analysis environment.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888;&#65039; Gotcha</span>
+          <p>If evidence preservation itself raises (disk full, permission error, network timeout copying to remote storage), you lose the evidence but you still need the teardown. Don't put the <code>TerminateMicrovm</code> call after the evidence export in a linear sequence &mdash; put it in a <code>finally</code> block that runs regardless. The alternative &mdash; a lingering analysis MicroVM that outlives a failed export &mdash; is strictly worse than lost evidence, because it's lost evidence <em>plus</em> a live liability. Chapter 10's resource-limits discussion applies here too: the MicroVM's 8-hour <code>maximumDurationInSeconds</code> ceiling is a backstop, not a cleanup strategy.</p>
+        </aside>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Build a Malware Analysis Pipeline</h2>
+
+        <p>Your challenge is to implement the core of the pipeline this chapter described: an <code>AnalysisPipeline</code> class that runs a sample function under a network policy, captures file writes and blocked connection attempts, computes an integrity hash over the captured artifacts, and guarantees a teardown callback fires even if the sample raises.</p>
+
+        <p>Open <code>challenges/ch16.py</code> and implement:</p>
+
+        <ul>
+          <li><code>NetworkPolicy.attempt_connection(destination)</code> &mdash; records a <code>NetworkAttempt</code> (blocked=True) and returns <code>False</code>.</li>
+          <li><code>AnalysisPipeline.__init__(sample_id, teardown_callback)</code> &mdash; stores both, initializes <code>self.network</code>, <code>self.files</code> (dict), and <code>self._torn_down</code> (False).</li>
+          <li><code>AnalysisPipeline.write_file(name, content)</code> &mdash; records <code>content</code> (bytes) under <code>name</code> in <code>self.files</code>.</li>
+          <li><code>AnalysisPipeline.run(sample_fn)</code> &mdash; calls <code>sample_fn(self)</code> in a try/finally that always calls <code>teardown_callback()</code> and sets <code>_torn_down = True</code>; on success, returns an <code>Evidence</code> dataclass with <code>artifact_hash</code> computed as the SHA-256 of all file contents concatenated in sorted filename order.</li>
+          <li><code>AnalysisPipeline.compute_hash()</code> &mdash; the standalone hash computation (SHA-256 of concatenated file contents in sorted key order; empty-bytes hash if no files).</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges &amp;&amp; python3 -m pytest ch16_test.py -v</code></pre>
+
+        <p>Fifteen tests cover the network policy, file recording, hash computation (including sorted-order correctness), successful runs, teardown on exceptions, and evidence integrity. See <code>solutions/ch16.py</code> when you're ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>Run <code>examples/ch16_malware_analysis_pipeline.py</code> first to see the full pipeline &mdash; launch a simulated sandbox, execute a synthetic sample, observe blocked network attempts and created files, preserve evidence with a SHA-256 hash, and guarantee teardown &mdash; entirely offline, no AWS account needed. Then implement the challenge's <code>AnalysisPipeline</code> to internalize the same pattern at a testable scale.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch15.html">Chapter 15: AI Coding Assistant Pattern</a>
+        <a class="next" href="ch17.html">Chapter 17: Beyond Lambda MicroVMs</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

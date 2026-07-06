@@ -622,3 +622,32 @@ MicroVM boundary, not a real VM — consistent with how Chapter 11's
 `MockMicrovmClient` and Chapter 14's `BlueGreenOrchestrator` example already
 handled the same "simulate the API shape, not the network" pattern for
 scenarios that don't need a live AWS call to teach the point.
+
+## Chapter 16 (Security Testing Sandbox) research
+
+### INetSim — fake-internet simulator for malware analysis (verified 2026-07-06)
+
+Fetched `https://www.inetsim.org/` (HTTP 200, live) and confirmed:
+
+> "INetSim is a software suite for simulating common internet services in a
+> lab environment, e.g. for analyzing the network behaviour of unknown malware
+> samples."
+
+INetSim provides simulated DNS, HTTP/HTTPS, SMTP, FTP, and other services so
+that malware samples in a sandboxed environment can attempt C2 callbacks,
+download payloads, or exfiltrate data against fake services that log everything
+without allowing real internet access. This is the standard companion tool
+paired with sandbox detonation environments (Cuckoo Sandbox, FLARE VM, REMnux)
+in malware-analysis lab setups.
+
+Live-verified URL used in Chapter 16 HTML:
+- `https://www.inetsim.org/` — project homepage, confirmed 200 on 2026-07-06.
+
+### RFC 5737 TEST-NET addresses (not re-verified — well-known IETF standard)
+
+The example script uses `192.0.2.1` (TEST-NET-1, RFC 5737) as the destination
+for the synthetic sample's blocked outbound connection attempt. This is a
+documentation/example address block that routes nowhere on the real internet,
+making it safe to use as a stand-in for a C2 server address without any risk
+of hitting a real host. No verification needed — this is a permanent IANA
+reservation documented in RFC 5737 (January 2010).
