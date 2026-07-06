@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 14 &middot; Production Patterns &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Image versioning and updates, health-gated blue/green cutover, scaling heuristics, retry-with-backoff, and designing around the 8-hour maximum runtime. Chapter 14 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part IV &middot; Advanced Patterns.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, production patterns, blue-green deployment, image versioning, scaling, retry backoff, 8-hour limit, orchestrator">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch14.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 14 &middot; Production Patterns &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Image versioning and updates, health-gated blue/green cutover, scaling heuristics, retry-with-backoff, and designing around the 8-hour maximum runtime.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch14.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 14 &middot; Production Patterns">
+<meta name="twitter:description" content="Image versioning and updates, health-gated blue/green cutover, scaling heuristics, retry-with-backoff, and designing around the 8-hour maximum runtime.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 14,
+  "name": "Production Patterns",
+  "description": "Image versioning and updates, health-gated blue/green cutover, scaling heuristics, retry-with-backoff, and designing around the 8-hour maximum runtime.",
+  "url": "{{PAGES_URL}}chapters/ch14.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch13.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch15.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Networking and Egress Control</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Storage and State</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>File System Isolation</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ol>
+      <p class="part-label">Part IV &middot; Advanced Patterns</p>
+      <ol start="11">
+        <li><a href="ch11.html"><span class="ch-num">11</span>Multi-Tenant Isolation</a></li>
+        <li><a href="ch12.html"><span class="ch-num">12</span>Security Hardening</a></li>
+        <li><a href="ch13.html"><span class="ch-num">13</span>Observability and Debugging</a></li>
+        <li><a href="ch14.html" class="current"><span class="ch-num">14</span>Production Patterns</a></li>
+      </ol>
+      <p class="part-label">Part V &middot; Real-World Agent Systems</p>
+      <ol start="15">
+        <li><a href="ch15.html"><span class="ch-num">15</span>AI Coding Assistant Pattern</a></li>
+        <li><a href="ch16.html"><span class="ch-num">16</span>Security Testing Sandbox</a></li>
+        <li><a href="ch17.html"><span class="ch-num">17</span>Beyond Lambda MicroVMs</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 14</p>
+        <h1>Production Patterns</h1>
+        <p class="subtitle">Everything in Part IV so far has been about one MicroVM behaving correctly under load, attack, or scrutiny. This chapter is about a fleet of them behaving correctly over time &mdash; new image versions, more traffic than one instance can serve, launches that fail for reasons that have nothing to do with your code, and sessions that eventually just... end.</p>
+      </header>
+
+      <section id="image-versioning">
+        <h2>Image Versioning and Updates</h2>
+
+        <p>Every <code>CreateMicrovmImage</code> call doesn't overwrite the previous image &mdash; it produces a new, numbered version. Chapter 13's research turned up a real example of this from a live account: the <code>lambda-microvms-poc-hello-world</code> image sits at version 11.0, and <code>ListMicrovmImageBuilds</code> confirmed that a single image version can have more than one build behind it, one per Graviton chipset generation. A production orchestrator has to think in terms of "which version is a given running MicroVM on," not just "which image."</p>
+
+        <p><code>RunMicrovm</code>'s real response (captured live against that same account in Chapter 5's research) includes the field directly:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">imageVersion field on a real RunMicrovm response</figcaption>
+          <pre><code class="language-json">{
+    "microvmId": "microvm-29fabacb-68fe-30ed-b477-39bf36e55b16",
+    "state": "PENDING",
+    "imageArn": "arn:aws:lambda:us-east-1:&lt;account-id&gt;:microvm-image:lambda-microvms-poc-hello-world",
+    "imageVersion": "11.0"
+}</code></pre>
+        </figure>
+
+        <p>Track that field the same way you'd track a container image digest: log it on every launch, and keep a small mapping in your orchestrator's own state (a database row, a config value &mdash; not necessarily anything fancy) of which version is currently considered "live" for new traffic. <code>UpdateMicrovmImage</code> and <code>UpdateMicrovmImageVersion</code> exist for changing an image's configuration after the fact, but neither one silently migrates already-running MicroVMs to a new version &mdash; a running instance keeps the version it launched with until it's terminated and relaunched. That's the property the next section builds on.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888;&#65039; Gotcha</span>
+          <p><code>ListMicrovmImageBuilds</code> requires <code>--image-version</code> as a required parameter, not just an image identifier &mdash; you can't list every build across every version of an image in one call. If your orchestrator needs a full build history, iterate <code>ListMicrovmImageVersions</code> first, then call <code>ListMicrovmImageBuilds</code> once per version.</p>
+        </aside>
+      </section>
+
+      <section id="blue-green">
+        <h2>Blue/Green Deployment for Sandbox Updates</h2>
+
+        <p>Because a running MicroVM never migrates to a new image version on its own, rolling out a new version is naturally a launch-new-then-retire-old operation, not an in-place upgrade. That maps directly onto blue/green deployment: "blue" is whatever image version is currently taking new sessions, "green" is the candidate you just built. The only rule that matters is: never flip live traffic to green until you've launched it and confirmed it's actually healthy.</p>
+
+        <p>"Healthy" here reuses Chapter 13's health-check logic exactly &mdash; a MicroVM in <code>RUNNING</code> or <code>SUSPENDED</code> state is fine to serve traffic; <code>TERMINATED</code> or <code>FAILED</code> means something went wrong during launch and the cutover should abort, leaving blue as the live version. This is the same <code>GetMicrovm</code> state machine Chapter 13 introduced for debugging, now used as a deployment gate instead of a debugging aid.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch14_orchestrator.py &mdash; real output from running this script locally</figcaption>
+          <pre><code class="language-text">=== Retry with backoff ===
+
+  attempt 1 failed (throttled launching image version 14.0); retrying in 1.04s
+  attempt 2 failed (throttled launching image version 14.0); retrying in 2.04s
+  -&gt; launched microvm-14.0-3 on image version 14.0
+
+=== Blue/green cutover: healthy candidate ===
+
+Staging candidate image version 14.0 alongside live 13.0
+  attempt 1 failed (throttled launching image version 14.0); retrying in 1.05s
+  attempt 2 failed (throttled launching image version 14.0); retrying in 2.08s
+Candidate 14.0 healthy - cutting traffic over
+  -&gt; cutover happened=True, live_version=14.0
+
+=== Blue/green cutover: unhealthy candidate stays on blue ===
+
+Staging candidate image version 14.1 alongside live 13.0
+Candidate 14.1 failed health check (state=TERMINATED); aborting cutover, staying on 13.0
+  -&gt; cutover happened=False, live_version=13.0
+
+=== Scaling decisions ===
+
+  running=0, queued=3 -&gt; launch
+  running=2, queued=15 -&gt; launch
+  running=3, queued=0 -&gt; scale_down
+  running=2, queued=4 -&gt; hold
+
+=== Done ===</code></pre>
+        </figure>
+
+        <p>Notice the second cutover attempt: the candidate's launch itself succeeded well enough to return a state, but that state was <code>TERMINATED</code>, and the orchestrator correctly refuses to move live traffic onto it. That's the entire point of gating on health rather than on "did the API call return 200" &mdash; a MicroVM can launch and still not be something you want serving requests.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Keep at least one blue instance warm during a cutover window rather than terminating it the instant green passes its health check. Sessions that were mid-execution on blue when the cutover happened should be allowed to finish rather than getting cut off &mdash; drain blue on a timer (or once its active-session count hits zero), the same pattern you'd use for any stateful service, not just MicroVMs.</p>
+        </aside>
+      </section>
+
+      <section id="scaling">
+        <h2>Scaling: When to Launch More MicroVMs</h2>
+
+        <p>Lambda MicroVMs has no autoscaling group, no target-tracking policy, and (per Chapter 13's research) no dedicated CloudWatch metrics namespace to drive one even if it did. The scaling signal is whatever your own orchestrator computes from <code>ListMicrovms</code> output and its own request queue &mdash; there is nothing built into the service to delegate this to.</p>
+
+        <p>A minimal heuristic that's good enough for a bursty sandbox workload: launch another MicroVM if there are zero running and requests are queued, or if the backlog per running instance crosses a threshold; scale down if instances are idle with no queue. The example script's <code>decide_scaling_action</code> implements exactly this and the real output above shows all four branches: <code>launch</code> when nothing's running yet, <code>launch</code> when the backlog per instance is too deep, <code>scale_down</code> when instances sit idle, and <code>hold</code> when things are balanced.</p>
+
+        <p>Whichever heuristic you pick, remember Chapter 11's framing still applies underneath it: "launch more MicroVMs" and "route more sessions onto fewer shared MicroVMs" are two different scaling strategies with the same cost/isolation tradeoff that chapter covered for multi-tenancy, not two names for the same thing.</p>
+      </section>
+
+      <section id="error-recovery">
+        <h2>Error Recovery and Retry Logic</h2>
+
+        <p>Not every launch failure means the same thing. Chapter 13 already drew this distinction for execution-level errors: check whether a failure is transient (the instance is fine, the specific request failed) or structural (the instance itself is gone or never came up). The same split applies one level up, at the launch call itself.</p>
+
+        <p>A throttling or capacity error from <code>RunMicrovm</code> is transient &mdash; retrying with backoff is the right response, and Chapter 5's research already surfaced a real, easy-to-misread <code>ParamValidation</code> error (a missing <code>idlePolicy</code> field) that looks like it needs a retry but actually needs a code fix. Distinguishing those two cases matters: retrying a malformed request forever just wastes time and API calls. The example orchestrator's <code>launch_with_retry</code> only retries on a distinct <code>TransientLaunchError</code>, and lets anything else propagate immediately, for exactly this reason.</p>
+
+        <p>Backoff itself should be exponential and capped, with a little jitter, so that a fleet of orchestrator workers hitting the same throttle don't all retry in lockstep and re-trigger the same throttle a second later. The example script's backoff (<code>min(2 ** (attempt - 1), 8)</code> seconds plus a small random jitter) is a standard shape for this &mdash; nothing MicroVM-specific, the same pattern you'd use retrying any rate-limited AWS API call.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>The AWS CLI itself already retries transient errors on most API calls by default (adaptive retry mode with exponential backoff), so if you're calling <code>RunMicrovm</code> through the CLI or an SDK rather than raw HTTP, you may already be getting some of this for free at the transport level. Application-level retry logic like this chapter's example still matters on top of that for anything the SDK doesn't retry automatically &mdash; a launch that "succeeds" into a bad state, for instance, which no HTTP-layer retry logic can detect.</p>
+        </aside>
+      </section>
+
+      <section id="eight-hour-limit">
+        <h2>Designing for the 8-Hour Limit</h2>
+
+        <p>Chapter 10 introduced the hard ceiling: <code>maximumDurationInSeconds</code> defaults to 28800 seconds, which is exactly 8 hours, confirmed on a real <code>RunMicrovm</code> response in this course's own research. Chapter 13 then showed what a clean expiry actually looks like from the outside &mdash; a real terminated instance with <code>"stateReason": "Success."</code>, indistinguishable at that field from an explicit <code>TerminateMicrovm</code> call. A production orchestrator has to plan for that termination before it happens, not just handle it afterward.</p>
+
+        <p>The practical pattern is to track each instance's <code>startedAt</code> timestamp (also present on the real <code>RunMicrovm</code> response) and treat "approaching 8 hours" as its own health signal, distinct from the <code>RUNNING</code>/<code>SUSPENDED</code>/<code>TERMINATED</code> state machine Chapter 13 built. A long-running agent session that's going to need more than 8 hours of wall-clock time isn't a bug to work around inside one MicroVM &mdash; it's a signal to checkpoint whatever state matters (the same persistent-disk state Chapter 3 and Chapter 9 covered) and hand off to a freshly launched instance before the clock runs out, rather than discovering the hard way that the service terminated a session mid-task.</p>
+
+        <p>Note that <code>maxIdleDurationSeconds</code> (Chapter 6/13's auto-suspend knob) and <code>maximumDurationInSeconds</code> are independent limits: a MicroVM that's actively handling requests can still be auto-suspended for being idle between them, and separately still hits the hard 8-hour ceiling regardless of how much of that time it spent suspended versus running. Neither one substitutes for the other in your orchestrator's bookkeeping.</p>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Build a Production-Ready Orchestrator</h2>
+
+        <p>Your challenge is to implement the orchestrator this chapter walked through: image-version tracking, retry-with-backoff around a flaky launch call, health-gated blue/green cutover, and the scaling heuristic.</p>
+
+        <p>Open <code>challenges/ch14.py</code> and implement <code>ProductionOrchestrator</code>:</p>
+
+        <ul>
+          <li><code>__init__(live_version)</code> &mdash; sets the initially live image version; no candidate staged yet.</li>
+          <li><code>stage_candidate(version)</code> &mdash; records a pending candidate version.</li>
+          <li><code>launch_with_retry(launch_fn, image_version, max_attempts=4)</code> &mdash; calls <code>launch_fn</code>, retrying on <code>TransientLaunchError</code> up to <code>max_attempts</code> times, recording every attempt (success or failure) in <code>self.attempts</code>; raises <code>RuntimeError</code> if every attempt fails.</li>
+          <li><code>cut_over(instance)</code> &mdash; health-checks a launched instance dict (<code>RUNNING</code>/<code>SUSPENDED</code> are healthy) and only then flips <code>live_version</code> to the staged candidate; raises <code>ValueError</code> with no candidate staged.</li>
+          <li><code>decide_scaling_action(running_count, queued_requests, max_per_microvm=5)</code> &mdash; returns <code>"launch"</code>, <code>"scale_down"</code>, or <code>"hold"</code> per the heuristic above.</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges &amp;&amp; python3 -m pytest ch14_test.py -v</code></pre>
+
+        <p>Seventeen tests cover candidate staging, retry accounting and exhaustion, cutover health-gating for each MicroVM state, and every branch of the scaling heuristic. See <code>solutions/ch14.py</code> when you're ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>Run <code>examples/ch14_orchestrator.py</code> to see a real retry-with-backoff sequence, a successful blue/green cutover, an aborted cutover against an unhealthy candidate, and all four branches of the scaling heuristic &mdash; entirely offline, no AWS calls required.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch13.html">Chapter 13: Observability and Debugging</a>
+        <a class="next" href="ch15.html">Chapter 15: AI Coding Assistant Pattern</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

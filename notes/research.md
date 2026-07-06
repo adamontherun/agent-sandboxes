@@ -515,3 +515,25 @@ for the concrete cost-optimization mechanism: aggressive auto-suspend is the
 primary cost lever Lambda MicroVMs exposes, not a separate cost-monitoring
 API. No dedicated Cost Explorer / Budgets integration specific to Lambda
 MicroVMs was found or claimed.
+
+## Chapter 14 (Production Patterns) research
+
+No new external facts were needed for this chapter beyond what earlier
+chapters already captured and verified live against the `poc` account:
+
+- Image versioning: reused the `imageVersion` field on a real `RunMicrovm`
+  response (captured in the "Verified Real CLI Transcript" section above)
+  and the `ListMicrovmImageBuilds` per-Graviton-generation build behavior
+  (captured in the "Real ListMicrovmImageBuilds output" section above).
+- 8-hour limit: reused `maximumDurationInSeconds: 28800` from the same real
+  `RunMicrovm` transcript, and the `stateReason: "Success."` clean-termination
+  field from Chapter 13's live `GetMicrovm` research.
+- Idle-policy fields (`maxIdleDurationSeconds`, `suspendedDurationSeconds`,
+  `autoResumeEnabled`) and the "no dedicated metrics namespace, no
+  autoscaling" gap: reused from Chapter 13's research (confirmed live via
+  `aws cloudwatch list-metrics` returning no MicroVMs-specific namespace).
+- The blue/green cutover, retry-with-backoff, and scaling-heuristic code in
+  `examples/ch14_orchestrator.py` is original to Chapter 14, framed
+  explicitly in the chapter text as an orchestration pattern built from
+  those primitives, not a restatement of an AWS-documented feature — Lambda
+  MicroVMs has no built-in blue/green or autoscaling primitive of its own.
