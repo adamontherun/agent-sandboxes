@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 2 · Understanding Firecracker MicroVMs — Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="How Firecracker achieves VM-level isolation with container-like speed through a minimal device model and KVM. Chapter 2 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part I · Foundations.">
+<meta name="keywords" content="firecracker, microvm, kvm, virtualization, containers, docker">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch02.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 2 · Understanding Firecracker MicroVMs">
+<meta property="og:description" content="How Firecracker achieves VM-level isolation with container-like speed.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch02.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 2 · Understanding Firecracker MicroVMs">
+<meta name="twitter:description" content="How Firecracker achieves VM-level isolation with container-like speed.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 2,
+  "name": "Understanding Firecracker MicroVMs",
+  "description": "How Firecracker achieves VM-level isolation with container-like speed.",
+  "url": "{{PAGES_URL}}chapters/ch02.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch01.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch03.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I · Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html" class="current"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+      <header>
+        <p class="chapter-label">Chapter 2</p>
+        <h1>Understanding Firecracker MicroVMs</h1>
+        <p class="subtitle">How Firecracker achieves VM-level isolation with container-like speed through a minimal device model and KVM-based hardware virtualization.</p>
+      </header>
+
+      <!-- Section 1 -->
+      <section id="what-makes-firecracker-different">
+        <h2>What Makes Firecracker Different from Docker and Traditional VMs</h2>
+
+        <p>To understand where Firecracker sits, you need to understand the three dominant isolation strategies and the tradeoffs each makes between security, performance, and density.</p>
+
+        <h3>Process / Container Isolation (Docker)</h3>
+        <p>Docker containers share the host Linux kernel. Isolation comes from kernel namespaces (PID, network, mount, user) and cgroups for resource limits. The container runtime never boots an OS &mdash; it calls <code>clone()</code> with namespace flags and drops into a chroot-like filesystem view.</p>
+        <p>This is fast (sub-second startup) and memory-efficient (tens of MiB overhead), but the shared kernel is the problem. A kernel vulnerability gives an attacker access to every container on the host. For multi-tenant workloads like AI coding agents running untrusted code, that is an unacceptable risk.</p>
+
+        <h3>Traditional VMs (QEMU/KVM)</h3>
+        <p>A traditional virtual machine manager like QEMU boots an entire guest OS with its own kernel. QEMU emulates dozens of devices: USB controllers, PCI bridges, sound cards, display adapters, ACPI tables. Each emulated device is C code that parses untrusted guest input &mdash; a large attack surface.</p>
+        <p>You get strong isolation (separate kernel, hardware-enforced memory boundaries), but at a cost: 200&ndash;500 MiB of overhead per VM, 3&ndash;10 seconds to boot, and QEMU itself is roughly 1.4 million lines of code.</p>
+
+        <h3>Firecracker: The Middle Path</h3>
+        <p><a href="https://github.com/firecracker-microvm/firecracker" target="_blank" rel="noopener">Firecracker</a> (35.3k stars on GitHub) is a Virtual Machine Monitor (VMM) written in Rust. It gives you the same hardware-enforced isolation as QEMU/KVM &mdash; each guest has its own kernel, its own address space, separated by CPU privilege levels &mdash; but strips away everything a cloud workload does not need.</p>
+
+        <p>The result:</p>
+        <ul>
+          <li>Startup in under 125 milliseconds</li>
+          <li>Memory overhead under 5 MiB per microVM</li>
+          <li>Creation rate of up to 150 microVMs per second on a single host</li>
+          <li>Only 5 emulated devices (vs. dozens in QEMU)</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <p><strong>Under the hood:</strong> Firecracker is not a fork of QEMU. It was written from scratch in Rust specifically for serverless and container workloads. The entire codebase is roughly 50k lines of Rust &mdash; small enough for meaningful security audits.</p>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Property</th>
+              <th>Docker Container</th>
+              <th>Traditional VM (QEMU)</th>
+              <th>Firecracker MicroVM</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Isolation boundary</td>
+              <td>Kernel namespaces</td>
+              <td>Hardware (KVM)</td>
+              <td>Hardware (KVM)</td>
+            </tr>
+            <tr>
+              <td>Guest kernel</td>
+              <td>Shared with host</td>
+              <td>Own kernel</td>
+              <td>Own kernel</td>
+            </tr>
+            <tr>
+              <td>Startup time</td>
+              <td>~500 ms</td>
+              <td>3&ndash;10 s</td>
+              <td>&lt;125 ms</td>
+            </tr>
+            <tr>
+              <td>Memory overhead</td>
+              <td>10&ndash;50 MiB</td>
+              <td>200&ndash;500 MiB</td>
+              <td>&lt;5 MiB</td>
+            </tr>
+            <tr>
+              <td>Emulated devices</td>
+              <td>N/A (uses host)</td>
+              <td>Dozens</td>
+              <td>5</td>
+            </tr>
+            <tr>
+              <td>Attack surface</td>
+              <td>Entire kernel syscall interface</td>
+              <td>Large device model</td>
+              <td>Minimal device model + seccomp</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section 2 -->
+      <section id="five-device-model">
+        <h2>The Five-Device Model: Minimal Attack Surface</h2>
+
+        <p>Every emulated device in a VMM is code that processes input from the guest. A bug in any device emulation is a potential guest-to-host escape. QEMU emulates IDE controllers, floppy drives, VGA adapters, USB hubs, and more &mdash; most of which a serverless function never touches.</p>
+
+        <p>Firecracker exposes exactly five devices:</p>
+
+        <ol>
+          <li><strong>virtio-net</strong> &mdash; Network interface. TAP-backed, high-performance paravirtualized networking.</li>
+          <li><strong>virtio-block</strong> &mdash; Block storage. Backed by a file on the host; the guest sees a disk.</li>
+          <li><strong>virtio-vsock</strong> &mdash; Host-guest communication channel without requiring network configuration. Used for control-plane RPCs between the Lambda runtime and the sandbox.</li>
+          <li><strong>Serial console</strong> &mdash; Text I/O for boot logs and debugging. Minimal parsing surface.</li>
+          <li><strong>i8042 keyboard controller</strong> &mdash; Used only to signal system reset (Ctrl+Alt+Del equivalent). No actual keyboard input is processed.</li>
+        </ol>
+
+        <p>That is it. No USB, no PCI bridge, no display, no sound, no ACPI beyond the basics. Each device that does not exist is an entire class of vulnerabilities that cannot happen.</p>
+
+        <div class="callout callout-warning">
+          <p><strong>Production tip:</strong> The virtio devices use paravirtualization &mdash; the guest kernel knows it is in a VM and cooperates with a simple, well-defined protocol. This is both faster and simpler to audit than emulating real hardware behavior that was never designed for security.</p>
+        </div>
+      </section>
+
+      <!-- Section 3 -->
+      <section id="kvm-explained">
+        <h2>KVM-Based Hardware Virtualization Explained for Backend Developers</h2>
+
+        <p>If you have never worked below the application layer, CPU privilege levels can feel abstract. Here is how it works concretely.</p>
+
+        <h3>CPU Ring Levels</h3>
+        <p>x86 (and Arm) CPUs have privilege levels, historically called "rings":</p>
+        <ul>
+          <li><strong>Ring 0</strong> &mdash; The OS kernel runs here. Full access to hardware, memory mapping, interrupts.</li>
+          <li><strong>Ring 3</strong> &mdash; User applications run here. Cannot touch hardware directly; must ask the kernel via syscalls.</li>
+        </ul>
+        <p>Before hardware virtualization, running a guest OS was tricky. The guest kernel expects to be in Ring 0, but you cannot give it real Ring 0 access without losing control. Solutions like binary translation (VMware) or paravirtualization (Xen) worked but were slow or required modifying the guest.</p>
+
+        <h3>Hardware Virtualization Extensions (VT-x / AMD-V)</h3>
+        <p>Intel VT-x and AMD-V added a new privilege level below Ring 0, sometimes called "Ring -1" or <strong>VMX root mode</strong>. The hypervisor runs in VMX root mode. The guest kernel runs in Ring 0 as it expects, but the CPU itself traps sensitive operations (page table changes, I/O port access, MSR writes) to the hypervisor.</p>
+
+        <p>This means:</p>
+        <ul>
+          <li>The guest kernel runs unmodified at near-native speed</li>
+          <li>The CPU hardware enforces that the guest cannot access host memory</li>
+          <li>Context switches between guest and host ("VM exits") are handled in hardware</li>
+        </ul>
+
+        <h3>What KVM Does</h3>
+        <p>KVM (Kernel-based Virtual Machine) is a Linux kernel module that exposes VT-x/AMD-V to userspace via <code>/dev/kvm</code>. A userspace program (the VMM &mdash; in our case, Firecracker) does the following:</p>
+
+        <ol>
+          <li>Opens <code>/dev/kvm</code> and creates a VM file descriptor</li>
+          <li>Allocates memory regions and maps them into the VM</li>
+          <li>Creates vCPU file descriptors (one per virtual processor)</li>
+          <li>Loads the guest kernel into the mapped memory</li>
+          <li>Enters a loop: calls <code>ioctl(KVM_RUN)</code> to execute the guest, handles VM exits when the guest does something that needs emulation</li>
+        </ol>
+
+        <p>The critical point: the guest code runs directly on the physical CPU. KVM is not interpreting instructions. When the guest does arithmetic, calls functions, or accesses its own memory, those operations happen at native speed. KVM only intervenes for privileged operations like I/O.</p>
+
+        <div class="callout callout-info">
+          <p><strong>Under the hood:</strong> A "VM exit" happens when the guest tries to access a device port, execute a <code>CPUID</code> instruction, or touch memory that is not mapped. The CPU traps to KVM, which routes the exit to the userspace VMM (Firecracker). Firecracker handles it (e.g., processes a virtio-net packet) and resumes the guest. Minimizing these exits is key to performance &mdash; and having only 5 devices means fewer reasons for the guest to exit.</p>
+        </div>
+
+        <h3>Security Layers in Firecracker</h3>
+        <p>KVM provides hardware isolation, but Firecracker adds defense in depth:</p>
+        <ul>
+          <li><strong>Seccomp filters</strong> &mdash; Thread-specific seccomp-BPF profiles restrict which syscalls the VMM process can make. Even if an attacker escapes the VM, the process cannot call dangerous syscalls.</li>
+          <li><strong>Jailer process</strong> &mdash; Before the VMM starts, a jailer sets up:
+            <ul>
+              <li>A chroot jail via <code>pivot_root()</code></li>
+              <li>cgroups (v1 or v2) for CPU and memory limits</li>
+              <li><code>setrlimit()</code> to cap file descriptors and other resources</li>
+              <li>Dedicated non-privileged UID/GID</li>
+              <li>Separate mount, PID, and network namespaces</li>
+            </ul>
+          </li>
+        </ul>
+
+        <div class="callout callout-warning">
+          <p><strong>Production hardening checklist:</strong></p>
+          <ul>
+            <li>Disable Simultaneous Multi-Threading (SMT) to prevent side-channel attacks between threads sharing a core</li>
+            <li>Disable Kernel Same-page Merging (KSM) to prevent memory deduplication side channels</li>
+            <li>Block Instance Metadata Service (IMDS) access from within VMs</li>
+            <li>Use DDR4 memory with Target Row Refresh (TRR) and ECC to mitigate Rowhammer attacks</li>
+          </ul>
+        </div>
+
+        <h3>Supported Hardware</h3>
+        <p>Firecracker supports:</p>
+        <ul>
+          <li><strong>Intel:</strong> Cascade Lake through Granite Rapids</li>
+          <li><strong>AMD:</strong> Milan and Genoa</li>
+          <li><strong>Arm:</strong> Graviton 2 through Graviton 4</li>
+        </ul>
+        <p>Guest OS support: Linux kernel 4.14+, Amazon Linux 2/2023, and Ubuntu 24.04.</p>
+      </section>
+
+      <!-- Section 4 -->
+      <section id="performance">
+        <h2>Performance: &lt;125ms Startup, &lt;5 MiB Overhead, 150 VMs/sec</h2>
+
+        <p>These are not theoretical numbers. They come from the <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">Firecracker documentation</a> and represent measured performance on supported hardware.</p>
+
+        <h3>Why It Is This Fast</h3>
+        <p>Traditional VM boot is slow because QEMU emulates BIOS/UEFI firmware, probes devices, initializes PCI buses, and loads bootloaders. Firecracker skips all of that:</p>
+        <ul>
+          <li>No BIOS or UEFI. Firecracker loads the kernel directly into memory and sets up boot parameters itself.</li>
+          <li>No device probing. The guest kernel is compiled to expect exactly the 5 virtio devices.</li>
+          <li>No bootloader chain. The kernel starts executing immediately.</li>
+          <li>Minimal memory allocation. Only the 5 MiB VMM overhead plus whatever you allocate to the guest.</li>
+        </ul>
+
+        <h3>What 150 VMs/Second Means in Practice</h3>
+        <p>On a single host, you can spin up 150 new microVMs every second. For an AI agent platform serving bursty traffic, this means:</p>
+        <ul>
+          <li>A cold start that the user perceives as instant (125ms is faster than most API round-trips)</li>
+          <li>Ability to scale from zero to hundreds of concurrent sandboxes in seconds</li>
+          <li>No need to maintain warm pools as large as you would with slower VMs</li>
+        </ul>
+
+        <h3>Memory Overhead Breakdown</h3>
+        <p>The under-5-MiB overhead covers:</p>
+        <ul>
+          <li>The Firecracker process itself (Rust binary, statically linked)</li>
+          <li>Data structures for the 5 virtio device backends</li>
+          <li>KVM-related structures in the kernel</li>
+          <li>Page tables for the guest physical-to-host virtual memory mapping</li>
+        </ul>
+        <p>This does not include the guest memory you allocate. If you give a VM 128 MiB for its workload, total consumption is 133 MiB. Compare that to a QEMU VM where the same workload consumes 478 MiB (350 MiB overhead + 128 MiB workload).</p>
+      </section>
+
+      <!-- Section 5 -->
+      <section id="lambda-leverages-firecracker">
+        <h2>How Lambda Leverages Firecracker</h2>
+
+        <p>AWS Lambda processes over 15 trillion invocations per month. Every one of those invocations runs inside a Firecracker microVM. When you deploy an AI coding agent as a Lambda function, the code your agent runs &mdash; including any untrusted code it generates and executes &mdash; is isolated at the hardware level from every other function on the same physical server.</p>
+
+        <p>The Lambda architecture uses Firecracker in a specific way:</p>
+        <ul>
+          <li><strong>One microVM per function instance.</strong> If your function scales to 100 concurrent executions, there are 100 separate Firecracker VMs running on the fleet.</li>
+          <li><strong>Warm pools.</strong> Lambda keeps recently-used VMs warm so repeat invocations skip the boot time entirely. The 125ms cold start matters only for the first invocation or after idle timeout.</li>
+          <li><strong>Snapshot/restore.</strong> Firecracker supports snapshotting a running VM's memory and CPU state, then restoring it later. This accelerates cold starts further by resuming from a pre-initialized state rather than booting from scratch.</li>
+          <li><strong>vsock for control plane.</strong> Lambda's runtime communicates with the host via virtio-vsock, avoiding the need to configure networking just for internal control messages.</li>
+        </ul>
+
+        <p>For agent sandboxes specifically, this means your agent can <code>exec()</code> arbitrary code, install packages, write to the filesystem, and even crash the guest kernel &mdash; none of which affects the host or other tenants. The CPU hardware enforces the boundary.</p>
+      </section>
+
+      <!-- Section 6 -->
+      <section id="overhead-comparison">
+        <h2>Example: Compare Resource Overhead of Different Isolation Approaches</h2>
+
+        <p>The following example calculates how many isolated workloads you can fit on a 64 GB host using each approach. Each workload needs 128 MiB of application memory.</p>
+
+        <pre><code class="language-python">#!/usr/bin/env python3
+"""Compare resource overhead of different isolation approaches."""
+
+HOST_MEMORY_GB = 64
+HOST_MEMORY_MIB = HOST_MEMORY_GB * 1024  # 65536 MiB
+
+# (name, overhead_mib, app_memory_mib, startup_ms)
+APPROACHES = [
+    ("Process (fork)",          0,   128, 1),
+    ("Container (Docker)",      30,  128, 500),
+    ("Traditional VM (QEMU)",   350, 128, 5000),
+    ("Firecracker MicroVM",     5,   128, 125),
+]
+
+for name, overhead, app_mem, startup in APPROACHES:
+    total = overhead + app_mem
+    instances = int(HOST_MEMORY_MIB // total)
+    print(f"{name:&lt;25} {overhead:&gt;4} MiB overhead | "
+          f"{instances:&gt;4} instances | {startup:&gt;5} ms startup")</code></pre>
+
+        <p>Output:</p>
+        <pre><code class="language-text">Process (fork)                0 MiB overhead |  512 instances |     1 ms startup
+Container (Docker)           30 MiB overhead |  414 instances |   500 ms startup
+Traditional VM (QEMU)       350 MiB overhead |  137 instances |  5000 ms startup
+Firecracker MicroVM           5 MiB overhead |  492 instances |   125 ms startup</code></pre>
+
+        <p>Firecracker achieves 96% of the density of raw processes while providing hardware-level isolation. A traditional VM gives you only 27% of that density.</p>
+
+        <div class="callout callout-info">
+          <p><strong>Run it yourself:</strong> The full runnable version is in <code>examples/ch02_overhead_comparison.py</code>.</p>
+        </div>
+      </section>
+
+      <!-- Section 7 -->
+      <section id="challenge">
+        <h2>Challenge: Calculate Overhead and Startup Time for Different Scenarios</h2>
+
+        <p>Open <code>challenges/ch02.py</code> and implement three functions:</p>
+
+        <ol>
+          <li><strong><code>calculate_max_vms(host_memory_gb, vm_overhead_mib, vm_memory_mib)</code></strong> &mdash; Given a host's total memory, per-VM overhead, and per-VM workload memory, return the maximum number of VMs that fit.</li>
+          <li><strong><code>estimate_startup_time(num_vms, creation_rate_per_sec)</code></strong> &mdash; Calculate wall-clock time to start N VMs at the given creation rate (150/sec for Firecracker).</li>
+          <li><strong><code>compare_isolation_approaches(workload_count, host_memory_gb)</code></strong> &mdash; Return a dict comparing all four approaches, including whether the requested workload count fits.</li>
+        </ol>
+
+        <p>Run the tests to verify:</p>
+        <pre><code class="language-bash">cd challenges &amp;&amp; pytest ch02_test.py -v</code></pre>
+
+        <p>Think about:</p>
+        <ul>
+          <li>On a 64 GB host, how many more Firecracker VMs can you run vs. traditional VMs?</li>
+          <li>If you need 400 concurrent agent sandboxes, which approaches can fit on a single host?</li>
+          <li>How long does it take to start 1000 Firecracker VMs? How about 1000 QEMU VMs?</li>
+        </ul>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch01.html">&larr; Ch 1: Why Agent Sandboxes Matter</a>
+        <a class="next" href="ch03.html">Ch 3: Lambda MicroVMs Architecture &rarr;</a>
+      </nav>
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

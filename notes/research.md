@@ -144,3 +144,40 @@
 ### Critical Caveat
 "All inputs to the jailer are considered trusted" - operator must ensure parent directories are not writable by unprivileged users
 
+
+## Live AWS Access for This Build
+
+A real, working AWS profile is available for this course build: `AWS_PROFILE=poc`
+(account `024989304407`, region `us-east-1`). It has genuine access to the
+`aws lambda-microvms` CLI and Lambda MicroVMs is live in this account.
+
+**Use this to capture REAL command output for chapters 4-16** instead of writing
+hypothetical CLI output — this directly satisfies the "never fabricate output"
+rule. Every drafting subagent for Parts II-V should:
+
+1. `export AWS_PROFILE=poc` before running any `aws lambda-microvms ...` command.
+2. Prefer reusing existing resources over creating new ones when the chapter's
+   point doesn't require a fresh image build:
+   - Existing image: `arn:aws:lambda:us-east-1:024989304407:microvm-image:lambda-microvms-poc-hello-world`
+     (state UPDATED, latest active version 11.0) — good for RunMicrovm / GetMicrovm /
+     auth token / suspend / resume / terminate examples.
+   - Existing image: `arn:aws:lambda:us-east-1:024989304407:microvm-image:lambda-microvms-egress-test`
+     (state UPDATED, version 13.0) — useful for chapters touching networking/egress.
+   - Existing image: `arn:aws:lambda:us-east-1:024989304407:microvm-image:adam-microvm-image-test-1`.
+3. **Always terminate any MicroVM you launch immediately after capturing its
+   output** (`aws lambda-microvms terminate-microvm ...`) — this is a real,
+   billable AWS account, not a sandbox. Never leave a running/suspended
+   MicroVM behind. Verify with `list-microvms` that nothing is left running
+   before finishing the chapter.
+4. Only create a NEW microvm-image (`create-microvm-image`, which triggers a real
+   Docker build) when the chapter is specifically about the image-build workflow
+   (e.g. Chapter 4). Don't rebuild images gratuitously — image builds cost time
+   and money and clutter the account with versions.
+5. Redact the raw account ID (`024989304407`) from any output pasted into book
+   HTML — replace with `<your-account-id>` or similar, the same way any AWS
+   tutorial redacts account IDs, since account IDs in public docs pages are the
+   kind of detail worth not publishing even though this course isn't being
+   deployed publicly this run.
+6. If a command requires a resource this account doesn't have permissions for,
+   or the CLI errors, capture the real error text (redacted) rather than
+   inventing a plausible-looking success — a real error is still real output.

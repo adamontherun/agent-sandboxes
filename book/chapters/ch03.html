@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 3 · Lambda MicroVMs Architecture — Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="How Lambda MicroVMs turn Dockerfiles into instant-launch sandboxes with full lifecycle control. Chapter 3 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part I · Foundations.">
+<meta name="keywords" content="lambda microvms, architecture, lifecycle, suspend, resume, authentication">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch03.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 3 · Lambda MicroVMs Architecture">
+<meta property="og:description" content="How Lambda MicroVMs turn Dockerfiles into instant-launch sandboxes with full lifecycle control.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch03.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 3 · Lambda MicroVMs Architecture">
+<meta name="twitter:description" content="How Lambda MicroVMs turn Dockerfiles into instant-launch sandboxes.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 3,
+  "name": "Lambda MicroVMs Architecture",
+  "description": "How Lambda MicroVMs turn Dockerfiles into instant-launch sandboxes with full lifecycle control.",
+  "url": "{{PAGES_URL}}chapters/ch03.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch02.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I · Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html" class="current"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+      <header>
+        <p class="part-label">Part I · Foundations</p>
+        <h1>Chapter 3: Lambda MicroVMs Architecture</h1>
+        <p class="subtitle">From Dockerfile to instant-launch sandbox with full lifecycle control</p>
+      </header>
+
+      <p>In <a href="ch02.html">Chapter 2</a> we explored how Firecracker provides hardware-level isolation in microseconds. Lambda MicroVMs build on that foundation, wrapping Firecracker in a managed service that handles image building, snapshotting, suspend/resume, and authentication for you. Announced on June 22, 2026 (<a href="https://aws.amazon.com/blogs/aws/run-isolated-sandboxes-with-full-lifecycle-control-aws-lambda-introduces-microvms/" target="_blank" rel="noopener">launch blog post</a>), the service is available in us-east-1, us-east-2, us-west-2, eu-west-1, and ap-northeast-1.</p>
+
+      <p>This chapter walks through the architecture end to end: how your Dockerfile becomes a bootable snapshot, how that snapshot powers instant launches, how the suspend/resume lifecycle keeps costs low while preserving state, and how authentication works. We finish with a comparison to traditional Lambda Functions and a hands-on lifecycle trace.</p>
+
+      <!-- Section 1 -->
+      <h2 id="image-based-deployment">1. Image-Based Deployment: Dockerfile to Snapshot to Instant Launch</h2>
+
+      <p>The deployment model for Lambda MicroVMs starts with two inputs you provide:</p>
+      <ol>
+        <li>A <strong>Dockerfile</strong> describing your sandbox environment (OS packages, runtimes, tools).</li>
+        <li>A <strong>code artifact</strong> stored in S3 (your application code, agent harness, or bootstrap scripts).</li>
+      </ol>
+
+      <p>When you call <code>CreateMicrovmImage</code> (<a href="https://docs.aws.amazon.com/lambda/latest/microvm-api/" target="_blank" rel="noopener">API Reference</a>), the service:</p>
+      <ol>
+        <li>Pulls the base image. AWS provides official base images: the ARN-based <code>arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1</code> or the public ECR image <code>public.ecr.aws/lambda/microvms:al2023-minimal</code>.</li>
+        <li>Builds your Dockerfile on top of the base, incorporating the S3 code artifact.</li>
+        <li>Boots the resulting image, runs initialization, then takes a <strong>memory snapshot</strong> of the fully-booted VM.</li>
+        <li>Stores the snapshot for future launches.</li>
+      </ol>
+
+      <p>Build logs stream to CloudWatch at <code>/aws/lambda/microvms/&lt;image-name&gt;</code>, so you can debug failed builds the same way you debug any CloudWatch log group.</p>
+
+      <p>The snapshot is the key insight. Because the VM is already booted and initialized in the snapshot, launching a new instance from it skips the entire boot sequence. The VM resumes from the snapshot in the same way your laptop resumes from sleep: memory contents, disk state, and process trees are all intact from the moment the snapshot was taken.</p>
+
+      <h3>Resource Limits</h3>
+      <p>Each MicroVM supports (<a href="https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html" target="_blank" rel="noopener">Developer Guide</a>):</p>
+      <ul>
+        <li><strong>Architecture:</strong> ARM64</li>
+        <li><strong>vCPUs:</strong> up to 16</li>
+        <li><strong>Memory:</strong> up to 32 GB</li>
+        <li><strong>Disk:</strong> up to 32 GB</li>
+        <li><strong>Max runtime:</strong> 8 hours</li>
+      </ul>
+
+      <!-- Section 2 -->
+      <h2 id="state-persistence">2. State Persistence Across Sessions</h2>
+
+      <p>Unlike traditional Lambda Functions that start fresh on every invocation, a Lambda MicroVM preserves its full state between interactions:</p>
+
+      <ul>
+        <li><strong>Memory:</strong> Variables, heap allocations, in-memory caches all survive.</li>
+        <li><strong>Disk:</strong> Files written to the filesystem persist. Databases, logs, downloaded dependencies stay put.</li>
+        <li><strong>Processes:</strong> Long-running daemons, language servers, or background workers continue executing.</li>
+      </ul>
+
+      <p>This makes MicroVMs suitable for agent sandboxes where an AI agent needs to install packages, build projects, run tests, and iterate - all within the same persistent environment across multiple interactions with a user.</p>
+
+      <p>When a MicroVM is suspended (see next section), this entire state is frozen and preserved. When it resumes, everything picks up exactly where it left off. The agent does not need to rebuild context, reinstall dependencies, or restore working directories.</p>
+
+      <!-- Section 3 -->
+      <h2 id="suspend-resume-lifecycle">3. The Suspend/Resume Lifecycle</h2>
+
+      <p>A Lambda MicroVM moves through the following states:</p>
+
+      <pre><code class="language-text">CREATING ──▶ RUNNING ──▶ IDLE ──▶ SUSPENDED ──▶ TERMINATED
+                ▲                      │
+                └──────── RESUMED ◀────┘</code></pre>
+
+      <p>Here is what drives each transition:</p>
+
+      <table>
+        <thead>
+          <tr><th>Transition</th><th>Trigger</th><th>API Operation</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>CREATING &#8594; RUNNING</td><td>Image snapshot ready, VM booted</td><td><code>RunMicrovm</code></td></tr>
+          <tr><td>RUNNING &#8594; IDLE</td><td>No incoming requests for a period</td><td>Automatic (idle detection)</td></tr>
+          <tr><td>IDLE &#8594; SUSPENDED</td><td>Idle duration exceeds <code>maxIdleDurationSeconds</code></td><td>Automatic, or <code>SuspendMicrovm</code></td></tr>
+          <tr><td>SUSPENDED &#8594; RUNNING</td><td>New request arrives (if <code>autoResumeEnabled</code>)</td><td>Automatic, or <code>ResumeMicrovm</code></td></tr>
+          <tr><td>Any &#8594; TERMINATED</td><td>Explicit termination or max runtime reached</td><td><code>TerminateMicrovm</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Idle Policy Configuration</h3>
+      <p>You control suspend behavior with three parameters:</p>
+      <ul>
+        <li><code>maxIdleDurationSeconds</code> - How long without requests before the VM suspends.</li>
+        <li><code>suspendedDurationSeconds</code> - How long a suspended VM is kept before termination.</li>
+        <li><code>autoResumeEnabled</code> - Whether incoming requests automatically wake a suspended VM.</li>
+      </ul>
+
+      <p>Suspended instances incur <strong>no compute charges</strong> (<a href="https://aws.amazon.com/lambda/lambda-microvms/" target="_blank" rel="noopener">product page</a>). You pay only for the storage of the suspended state. This makes the suspend/resume model economical for agent sandboxes that see bursty, interactive traffic.</p>
+
+      <!-- Section 4 -->
+      <h2 id="authentication">4. Authentication: JWE Tokens and Unique Endpoint URLs</h2>
+
+      <p>When you call <code>RunMicrovm</code>, the service returns two things:</p>
+      <ol>
+        <li>A <strong>unique endpoint URL</strong> for that specific MicroVM instance.</li>
+        <li>A <strong>JWE (JSON Web Encryption) authentication token</strong>.</li>
+      </ol>
+
+      <p>All subsequent requests to the MicroVM must include the token in the <code>X-aws-proxy-auth</code> header. Tokens are short-lived; you obtain fresh ones via <code>CreateMicrovmAuthToken</code>.</p>
+
+      <pre><code class="language-bash"># Obtain a fresh auth token for an existing MicroVM
+aws lambda create-microvm-auth-token \
+  --microvm-id mvm-0a1b2c3d4e5f67890
+
+# Use the token to make requests to the MicroVM endpoint
+curl -H "X-aws-proxy-auth: $TOKEN" \
+  https://mvm-0a1b2c3d4e5f67890.microvm.lambda.us-east-1.amazonaws.com/exec</code></pre>
+
+      <p>This auth model means each MicroVM is its own isolated endpoint. There is no shared gateway or multiplexed connection. An agent framework obtains the endpoint URL and token at launch time, then communicates directly with its sandbox. If the token expires mid-session, the framework calls <code>CreateMicrovmAuthToken</code> to get a new one without restarting the VM.</p>
+
+      <!-- Section 5 -->
+      <h2 id="comparison-with-lambda-functions">5. How It Differs from Lambda Functions</h2>
+
+      <table>
+        <thead>
+          <tr><th>Dimension</th><th>Lambda Functions</th><th>Lambda MicroVMs</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Execution model</td><td>Event-driven, request/response</td><td>Long-running, interactive</td></tr>
+          <tr><td>State</td><td>Stateless (fresh per invocation)</td><td>Stateful (memory, disk, processes persist)</td></tr>
+          <tr><td>Max duration</td><td>15 minutes</td><td>8 hours</td></tr>
+          <tr><td>Connectivity</td><td>Invoked via trigger/SDK</td><td>Direct HTTP endpoint per instance</td></tr>
+          <tr><td>Scaling model</td><td>Concurrent instances per request</td><td>One instance per agent session</td></tr>
+          <tr><td>Cold start</td><td>Milliseconds to seconds</td><td>Instant (snapshot resume)</td></tr>
+          <tr><td>Isolation</td><td>Firecracker MicroVM (shared)</td><td>Dedicated Firecracker MicroVM per instance</td></tr>
+          <tr><td>Cost when idle</td><td>No charge (no instance exists)</td><td>No compute charge (suspended state stored)</td></tr>
+          <tr><td>Use case</td><td>API backends, event processing</td><td>Agent sandboxes, dev environments, long tasks</td></tr>
+        </tbody>
+      </table>
+
+      <p>The key mental model shift: Lambda Functions are <em>compute units that react to events</em>, while Lambda MicroVMs are <em>persistent machines you control directly</em>. Functions scale horizontally and automatically; MicroVMs give you a dedicated, stateful environment with a direct network endpoint.</p>
+
+      <!-- Section 6 -->
+      <h2 id="lifecycle-trace">6. Example: Trace a MicroVM Lifecycle with AWS CLI</h2>
+
+      <p>The following sequence shows the complete lifecycle using AWS CLI commands. Each step includes the command you would run and a summary of the response. (See <code>examples/ch03_lifecycle_trace.py</code> for a runnable script that prints this trace.)</p>
+
+      <pre><code class="language-bash"># Step 1: Create an image from a Dockerfile + S3 code artifact
+aws lambda create-microvm-image \
+  --image-name agent-sandbox-v1 \
+  --dockerfile-uri s3://my-bucket/sandbox/Dockerfile \
+  --code-uri s3://my-bucket/sandbox/agent-code.tar.gz \
+  --base-image arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1
+# Response: ImageArn, Status: BUILDING
+
+# Step 2: Run a MicroVM from the image
+aws lambda run-microvm \
+  --image-arn arn:aws:lambda:us-east-1:123456789012:microvm-image:agent-sandbox-v1 \
+  --vcpus 4 --memory-mb 8192 --disk-gb 16 \
+  --idle-policy '{"maxIdleDurationSeconds":300,"autoResumeEnabled":true}'
+# Response: MicrovmId, EndpointUrl, AuthToken, Status: RUNNING
+
+# Step 3: Use the MicroVM (direct HTTP)
+curl -X POST \
+  -H "X-aws-proxy-auth: eyJhbGciOi..." \
+  -H "Content-Type: application/json" \
+  -d '{"command": "pip install pandas && python analysis.py"}' \
+  https://mvm-abc123.microvm.lambda.us-east-1.amazonaws.com/exec
+
+# Step 4: VM goes idle after 300s of no requests, then suspends automatically
+
+# Step 5: Resume (automatic on next request, or explicit)
+aws lambda resume-microvm --microvm-id mvm-abc123
+# Response: Status: RUNNING (state fully restored)
+
+# Step 6: Terminate when done
+aws lambda terminate-microvm --microvm-id mvm-abc123
+# Response: Status: TERMINATED</code></pre>
+
+      <!-- Section 7 -->
+      <h2 id="challenge">7. Challenge: Design a Lifecycle State Machine</h2>
+
+      <p>Your task: implement a <code>MicrovmLifecycle</code> class that models the state machine described in this chapter. The class should:</p>
+
+      <ul>
+        <li>Track the current state (CREATING, RUNNING, IDLE, SUSPENDED, TERMINATED).</li>
+        <li>Expose transition methods: <code>run()</code>, <code>idle()</code>, <code>suspend()</code>, <code>resume()</code>, <code>terminate()</code>.</li>
+        <li>Raise <code>InvalidTransitionError</code> when a transition is not allowed from the current state.</li>
+        <li>Provide <code>valid_transitions()</code> returning the list of actions available from the current state.</li>
+      </ul>
+
+      <p>The skeleton is in <code>challenges/ch03.py</code>. Tests are in <code>challenges/ch03_test.py</code>. A reference solution is in <code>solutions/ch03.py</code>.</p>
+
+      <p>Think carefully about which transitions are legal. For example: can you <code>resume()</code> from RUNNING? Can you <code>terminate()</code> from any state? Refer to the lifecycle diagram above.</p>
+
+      <hr>
+      <nav class="chapter-nav" aria-label="Previous and next chapters">
+        <a href="ch02.html">&larr; Chapter 2: Understanding Firecracker MicroVMs</a>
+      </nav>
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

