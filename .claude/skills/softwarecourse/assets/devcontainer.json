@@ -1,0 +1,79 @@
+// Generic devcontainer template. This is NOT meant to be used verbatim —
+// fill in the placeholders and delete whichever option (A or B) doesn't
+// apply, then delete these comment lines. Reference:
+// https://containers.dev/implementors/json_reference/
+//
+// devcontainer.json is JSONC (JSON + comments), which both VS Code and
+// GitHub Codespaces parse natively — these comments are safe to leave
+// during editing, just remove the ones that no longer apply before commit.
+{
+  "name": "{{COURSE_NAME}}",
+
+  // OPTION A — no live infra needed (a pure library/language course).
+  // Pick ONE base image matching the ecosystem, then delete OPTION B below
+  // (both the "dockerComposeFile"/"service" lines and docker-compose.extend.yml).
+  "image": "mcr.microsoft.com/devcontainers/{{python|javascript-node|rust|go}}:{{version-tag}}",
+
+  // OPTION B — course needs a live service (database, broker, etc).
+  // Delete the "image" line above. This pairs with
+  // docker-compose.extend.yml, which layers a dev-tooling container on
+  // top of the course's own compose.yaml WITHOUT editing that file, so
+  // local `docker compose up -d` behavior is completely unaffected. See
+  // that file's comments for a real gotcha this pattern hides: whatever
+  // port your compose.yaml maps for the live-infra service on the HOST
+  // must also be the port that service listens on INTERNALLY, or
+  // "localhost:<port>" means something different inside this devcontainer
+  // than it does on a reader's own machine. Verified end to end against a
+  // real Postgres-backed course before this template was written this way.
+  "dockerComposeFile": ["../compose.yaml", "docker-compose.extend.yml"],
+  "service": "app",
+  "workspaceFolder": "/workspaces/{{repo-folder-name}}",
+
+  // Match features to the ecosystem. Full catalog: https://containers.dev/features
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/va-h/devcontainers-features/uv:1": {}
+  },
+
+  // Run the exact setup a local reader would run, so Codespaces and a
+  // local clone behave identically. Adapt per ecosystem:
+  //   Python:  "uv sync"
+  //   Node:    "npm install"
+  //   Rust:    "cargo build"
+  //   Go:      "go mod download"
+  "postCreateCommand": "{{SETUP_COMMAND}}",
+
+  // Forward whatever port(s) a reader would connect to (the live-infra
+  // service's port, or a demo API server's port) so Codespaces auto-opens
+  // a preview / shows a forwarded-port link when it starts.
+  "forwardPorts": [],
+  // Label each forwarded port and default it to "silent" (don't pop a
+  // notification) unless it's something a reader is meant to click open
+  // immediately, e.g. a demo web server, in which case use "openBrowser".
+  "portsAttributes": {
+    "{{PORT}}": { "label": "{{WHAT_THIS_PORT_IS}}", "onAutoForward": "silent" }
+  },
+
+  // A fresh Codespace with no editor tooling configured is a worse first
+  // experience than a local clone with an IDE the reader already set up
+  // themselves — match that baseline. Pick the extensions for whatever
+  // ecosystem this course actually uses; don't include ones for stacks
+  // this course doesn't touch.
+  //   Python:  ms-python.python, ms-python.vscode-pylance,
+  //            charliermarsh.ruff, ms-python.mypy-type-checker
+  //   JS/TS:   dbaeumer.vscode-eslint, esbenp.prettier-vscode
+  //            (+ ms-vscode.vscode-typescript-next for TS)
+  //   Rust:    rust-lang.rust-analyzer
+  //   Go:      golang.go
+  "customizations": {
+    "vscode": {
+      "extensions": ["{{EXTENSION_ID}}"],
+      // Wire the linter/formatter as format-on-save so it's active from
+      // first open, not something a reader has to discover and configure.
+      // The exact settings block is ecosystem-specific — see
+      // SKILL.md's Final-stage lint/CI section for the Python example
+      // this was verified against.
+      "settings": {}
+    }
+  }
+}

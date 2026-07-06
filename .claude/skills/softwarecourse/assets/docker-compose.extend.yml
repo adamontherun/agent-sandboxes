@@ -1,0 +1,33 @@
+# Layers a dev-tooling service on top of the course's own compose.yaml,
+# purely for Codespaces/devcontainer use. Local development never touches
+# this file — plain `docker compose up -d` only starts the services
+# compose.yaml itself defines, exactly as it did before this file existed.
+#
+# Fill in the base image for the target ecosystem (a Python devcontainers
+# image, a Node one, etc.) and the port(s) your live-infra service(s)
+# actually use.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/{{python|javascript-node|...}}:{{tag}}
+    # Compose resolves relative volume paths against the PROJECT directory
+    # (wherever compose.yaml lives, since it's first in devcontainer.json's
+    # dockerComposeFile list) — not against this file's own directory. "."
+    # here means the project root, which is what you actually want mounted.
+    volumes:
+      - .:/workspaces/${localWorkspaceFolderBasename:-app}:cached
+    command: sleep infinity
+    depends_on:
+      {{live-infra-service-name}}:
+        condition: service_healthy
+    # Sharing the live-infra service's network namespace means "localhost"
+    # inside app IS that service's network stack — so whatever port your
+    # examples hardcode for the live-infra service must be the port it
+    # actually LISTENS on internally, not just a host-side port mapping.
+    # If your compose.yaml maps a non-default host port (e.g. Postgres on
+    # 5439 instead of 5432, to dodge collisions with a reader's own local
+    # instances), make the service listen on that same port internally too
+    # — for Postgres that's the PGPORT environment variable, verified to
+    # work via the official image. That way "localhost:<port>" is correct
+    # from the host, from this container, and in every example script,
+    # with nothing to reconcile between "local" and "Codespaces" modes.
+    network_mode: service:{{live-infra-service-name}}

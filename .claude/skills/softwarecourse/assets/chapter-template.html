@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch {{CH_NUM}} · {{CHAPTER_TITLE}} — {{COURSE_TITLE}}</title>
+<!--
+  Same SEO/social pattern as index-template.html — read that file's comment
+  on which tokens resolve now (KEYWORDS, AUTHOR, BRAND_HEX_WITH_HASH) vs.
+  at Deploy (PAGES_URL, OG_IMAGE_URL). {{CHAPTER_META_DESCRIPTION}} should be the
+  chapter's own {{ONE_LINE_CHAPTER_HOOK}} plus a "Chapter N of {{COURSE_TITLE}},
+  Part {{PART_ROMAN}} · {{PART_TITLE}}" suffix, not a copy of the course
+  description — a search result or share card for chapter 7 should say
+  what chapter 7 is about.
+-->
+<meta name="description" content="{{CHAPTER_META_DESCRIPTION}}">
+<meta name="keywords" content="{{KEYWORDS}}">
+<meta name="author" content="{{AUTHOR}}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch{{CH_NUM_PADDED}}.html">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="{{COURSE_TITLE}}">
+<meta property="og:title" content="Ch {{CH_NUM}} · {{CHAPTER_TITLE}} — {{COURSE_TITLE}}">
+<meta property="og:description" content="{{CHAPTER_META_DESCRIPTION}}">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch{{CH_NUM_PADDED}}.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch {{CH_NUM}} · {{CHAPTER_TITLE}} — {{COURSE_TITLE}}">
+<meta name="twitter:description" content="{{CHAPTER_META_DESCRIPTION}}">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<!--
+  Chapter JSON-LD. previousItem/nextItem reuse the exact same neighbor
+  chapters as the chapter-nav links at the bottom of this page (and are
+  absent on chapter 1 / the last chapter for the same reason those <nav>
+  links only show one direction there) — don't let the two drift apart.
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": {{CH_NUM}},
+  "name": "{{CHAPTER_TITLE}}",
+  "description": "{{ONE_LINE_CHAPTER_HOOK}}",
+  "url": "{{PAGES_URL}}chapters/ch{{CH_NUM_PADDED}}.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "{{COURSE_TITLE}}", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch{{PREV_NUM_PADDED}}.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch{{NEXT_NUM_PADDED}}.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">{{COURSE_TITLE_PART_1}} <span class="accent">{{COURSE_TITLE_PART_2}}</span></a>
+    <p class="tagline">{{COURSE_TAGLINE}}</p>
+
+    <!-- Same sidebar-links block as index-template.html; keep both in sync. -->
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+
+    <nav aria-label="Chapters">
+      <!--
+        Repeat this part-label + ol block per part of the course. Every
+        chapter page carries the FULL nav (not just its own part) so the
+        reader can jump anywhere. Mark the current chapter's <a> with
+        class="current" — that's what the sidebar's active-state CSS keys off.
+        There is no fixed "right" number of parts or chapters per part: let
+        the topic's natural shape decide, and confirm the outline with the
+        user during the interview phase before generating all the pages.
+      -->
+      <p class="part-label">Part {{PART_ROMAN}} · {{PART_TITLE}}</p>
+      <ol>
+        <li><a href="ch{{CH_NUM_PADDED}}.html" class="current"><span class="ch-num">{{CH_NUM}}</span>{{CHAPTER_TITLE}}</a></li>
+        <!-- ...more chapters in this part... -->
+      </ol>
+      <!-- ...more parts... -->
+    </nav>
+    <button class="theme-toggle" type="button">☾ Dark mode</button>
+  </aside>
+
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">☰ Chapters</button>
+
+  <main>
+    <article>
+      <p class="kicker">Chapter {{CH_NUM}} · Part {{PART_ROMAN}} — {{PART_TITLE}}</p>
+      <h1>{{CHAPTER_TITLE}}</h1>
+      <p class="lede">
+        <!--
+          2-4 sentences. State what this chapter actually teaches and why it
+          matters, in the author's own voice. Not a summary of bullet points
+          to come — a reason to keep reading. This is the highest-value
+          paragraph on the page for hooking a reader; don't waste it on
+          throat-clearing ("In this chapter, we will discuss...").
+        -->
+      </p>
+
+      <h2>{{SECTION_HEADING}}</h2>
+      <p>
+        Prose paragraph. Prefer plain sentences over bold-term-dash lists
+        (see references/humanizer-checklist.md before writing final copy —
+        that file explains exactly which patterns read as AI-generated and
+        why, so lean on it here rather than re-deriving the rules).
+      </p>
+
+      <!--
+        CITATION PATTERN: when a claim is load-bearing (an exact default
+        value, a "the docs recommend X", a benchmark number, a documented
+        gotcha) link it inline to the real source, the way a human writer
+        citing a source would — not a footnote number, just a normal link
+        in the sentence. Example:
+      -->
+      <p>
+        According to the
+        <a href="https://example.com/docs/real-page" target="_blank" rel="noopener">official documentation</a>,
+        the default value is 30 seconds. Verify this against the actual current
+        docs before writing it — do not paraphrase from training-data memory.
+      </p>
+
+      <figure class="codeblock">
+        <figcaption class="code-label">path/to/real_example.ext</figcaption>
+        <pre><code class="language-python"># Every code sample must be copy-pasted from a script you actually
+# ran, with output you actually captured. Never invent output.
+</code></pre>
+      </figure>
+
+      <!--
+        Four callout types are available, each with a distinct color and
+        icon (see style.css .callout.* rules). Use them sparingly — they
+        lose their power if every paragraph is boxed. One or two well-placed
+        callouts per chapter beats five.
+      -->
+
+      <aside class="callout gotcha">
+        <span class="callout-title">⚠ Gotcha</span>
+        <p>
+          A real failure mode, ideally with the actual error text the reader
+          will see, so they can pattern-match against it later.
+        </p>
+        <p class="source">Source: <a href="https://example.com" target="_blank" rel="noopener">short label for the source</a></p>
+      </aside>
+
+      <aside class="callout production">
+        <span class="callout-title">🏭 In production</span>
+        <p>
+          A real operational concern — scaling, deployment, monitoring,
+          security — that only shows up outside a toy example.
+        </p>
+      </aside>
+
+      <aside class="callout underhood">
+        <span class="callout-title">🔬 Under the hood</span>
+        <p>
+          What's actually happening beneath the API surface. Use this to
+          build a correct mental model, not just a list of facts.
+        </p>
+      </aside>
+
+      <aside class="callout watch21">
+        <span class="callout-title">⏭ Version watch</span>
+        <p>
+          What's changing in the next version of this technology, if
+          relevant. Rename the class/icon/heading for whatever's actually
+          coming (this class name is a leftover convention, not a
+          requirement — call it whatever fits the topic).
+        </p>
+      </aside>
+
+      <div class="tryit">
+        <h3>⚡ Try it</h3>
+        <!--
+          Same deploy-time token as the sidebar links above: fill in during
+          Deploy step 7, delete this <p> entirely if the course never ships
+          to GitHub.
+        -->
+        <p class="tryit-env">
+          No local setup? <a href="{{CODESPACES_URL}}" target="_blank" rel="noopener">Open this chapter in GitHub Codespaces</a> — {{WHAT_S_ALREADY_RUNNING}}.
+        </p>
+        <p>
+          Point at the exact runnable example(s) for this chapter and the
+          exact command to run them.
+        </p>
+        <p>
+          Then point at the chapter's challenge: a skeleton with failing
+          tests the reader edits until they pass. See
+          references/humanizer-checklist.md and the SKILL.md validation
+          section for how solutions/skeletons/tests must all actually run.
+        </p>
+      </div>
+
+      <nav class="chapter-nav">
+        <a href="ch{{PREV_NUM_PADDED}}.html"><span class="dir">← Previous</span>{{PREV_TITLE}}</a>
+        <a class="next" href="ch{{NEXT_NUM_PADDED}}.html"><span class="dir">Next →</span>{{NEXT_TITLE}}</a>
+      </nav>
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

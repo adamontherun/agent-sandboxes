@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{COURSE_TITLE}} — {{COURSE_TAGLINE}}</title>
+<meta name="description" content="{{ONE_SENTENCE_SEO_DESCRIPTION}}">
+<!--
+  SEO/social block. {{KEYWORDS}}, {{AUTHOR}}, and {{BRAND_HEX_WITH_HASH}}
+  (same brand color as readme-template.md's {{BRAND_HEX}}, just with the
+  leading "#" a CSS color needs that a shields.io URL can't have) are known
+  right now (stage 3/4) — fill them in immediately. {{PAGES_URL}} and
+  {{OG_IMAGE_URL}} (= {{PAGES_URL}} + "assets/screenshots/homepage.png",
+  once Deploy step 8 has produced that screenshot) can't resolve until
+  Deploy — leave those as literal tokens until step 7/9 the way every other
+  deploy-time token in this file already works. Reuse the exact same
+  {{ONE_SENTENCE_SEO_DESCRIPTION}} for og:description/twitter:description
+  so there's only one description to keep accurate, not three.
+-->
+<meta name="keywords" content="{{KEYWORDS}}">
+<meta name="author" content="{{AUTHOR}}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{COURSE_TITLE}}">
+<meta property="og:title" content="{{COURSE_TITLE}} — {{COURSE_TAGLINE}}">
+<meta property="og:description" content="{{ONE_SENTENCE_SEO_DESCRIPTION}}">
+<meta property="og:url" content="{{PAGES_URL}}">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{COURSE_TITLE}} — {{COURSE_TAGLINE}}">
+<meta name="twitter:description" content="{{ONE_SENTENCE_SEO_DESCRIPTION}}">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="assets/style.css">
+<!--
+  Schema.org Course JSON-LD. "hasPart" needs one {"@type":"Chapter",...}
+  entry per chapter in the course, generated the same way stage 5 already
+  keeps the sidebar nav and this page's own toc-parts in sync — script it
+  (see SKILL.md's Deploy step 9) rather than hand-writing N near-identical
+  objects. Resolved at Deploy alongside the other tokens in this file.
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Course",
+  "name": "{{COURSE_TITLE}}",
+  "description": "{{ONE_SENTENCE_SEO_DESCRIPTION}}",
+  "url": "{{PAGES_URL}}",
+  "image": "{{OG_IMAGE_URL}}",
+  "provider": {"@type": "Person", "name": "{{AUTHOR}}", "url": "{{AUTHOR_URL}}"},
+  "isAccessibleForFree": true,
+  "inLanguage": "en",
+  "hasPart": [
+    {"@type": "Chapter", "position": 1, "name": "{{CHAPTER_TITLE}}", "description": "{{ONE_LINE_CHAPTER_HOOK}}", "url": "{{PAGES_URL}}chapters/ch{{CH_NUM_PADDED}}.html"}
+  ]
+}
+</script>
+</head>
+<body>
+<div class="book">
+
+  <aside class="sidebar">
+    <a class="brand" href="index.html">{{COURSE_TITLE_PART_1}} <span class="accent">{{COURSE_TITLE_PART_2}}</span></a>
+    <p class="tagline">{{COURSE_TAGLINE}}</p>
+
+    <!--
+      Sidebar links to the live GitHub Codespace and repo. These only resolve
+      once the course is actually pushed to GitHub, so {{CODESPACES_URL}} /
+      {{REPO_URL}} stay as literal tokens until the Deploy stage fills them in
+      with real values across every book page (see SKILL.md's Deploy step 7).
+      If this course is never going to be deployed, delete this whole block
+      rather than shipping a book with dead links in it.
+    -->
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+
+    <nav aria-label="Chapters">
+      <!-- Same full nav block as chapter-template.html, paths without "../" since index.html lives at the book root. -->
+    </nav>
+
+    <button class="theme-toggle" type="button">☾ Dark mode</button>
+  </aside>
+
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">☰ Chapters</button>
+
+  <main>
+    <article class="cover">
+      <p class="kicker">A hands-on course</p>
+      <h1>{{COURSE_TITLE_PART_1}} <em style="color:var(--brand);font-style:normal">{{COURSE_TITLE_PART_2}}</em></h1>
+      <p class="lede">
+        <!--
+          One paragraph that tells a knowledgeable reader exactly what they'll
+          walk away knowing, and hints at the "why should I trust this" angle
+          (real infra, real tests, real citations — whatever's true here).
+        -->
+      </p>
+      <p>
+        <!--
+          One paragraph on the mechanics: runnable examples + failing-test
+          challenges per chapter, what infra/toolchain is needed (if any),
+          and the exact first command to run. If this course is being
+          deployed, mention BOTH ways to get a working environment (the
+          "Launch Codespace" sidebar button for zero-install, or a local
+          clone) the way this sentence does — reword or drop the Codespaces
+          half entirely if this course isn't being deployed.
+        -->
+        Click <a href="{{CODESPACES_URL}}" target="_blank" rel="noopener"><strong>Launch Codespace</strong></a>
+        in the sidebar for a ready-to-go environment, or clone the
+        <a href="{{REPO_URL}}" target="_blank" rel="noopener">repo</a> and run
+        <code>{{SETUP_COMMAND}}</code> locally.
+      </p>
+
+      <div class="toc-parts">
+        <!--
+          One <section class="toc-part"> per part of the course. Each links
+          every chapter in that part with a one-line description of what it
+          actually covers (not a restatement of the title). This is the
+          reader's first real signal of whether the course is worth their
+          time — write these descriptions as carefully as the chapters
+          themselves.
+        -->
+        <section class="toc-part">
+          <h2>Part {{PART_ROMAN}} · {{PART_TITLE}}</h2>
+          <ol>
+            <li><a href="chapters/ch{{CH_NUM_PADDED}}.html"><span class="ch-num">{{CH_NUM}}</span><span><span class="ch-title">{{CHAPTER_TITLE}}</span><span class="ch-desc">{{ONE_LINE_CHAPTER_HOOK}}</span></span></a></li>
+          </ol>
+        </section>
+      </div>
+    </article>
+  </main>
+</div>
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/book.js"></script>
+</body>
+</html>

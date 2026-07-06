@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Learn to safely execute untrusted code in isolated environments using AWS Lambda MicroVMs and Firecracker for AI agents, security testing, and multi-tenant applications.">
+<meta name="keywords" content="AWS Lambda, MicroVMs, Firecracker, agent sandbox, code execution, isolation, security, AI agents, Python">
+<meta name="author" content="Claude Code Course Builder">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Learn to safely execute untrusted code in isolated environments using AWS Lambda MicroVMs and Firecracker for AI agents, security testing, and multi-tenant applications.">
+<meta property="og:url" content="{{PAGES_URL}}">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta name="twitter:description" content="Learn to safely execute untrusted code in isolated environments using AWS Lambda MicroVMs and Firecracker for AI agents, security testing, and multi-tenant applications.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="#c0392b">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Course",
+  "name": "Building Agent Sandboxes with AWS Lambda MicroVMs",
+  "description": "Learn to safely execute untrusted code in isolated environments using AWS Lambda MicroVMs and Firecracker for AI agents, security testing, and multi-tenant applications.",
+  "url": "{{PAGES_URL}}",
+  "image": "{{OG_IMAGE_URL}}",
+  "provider": {"@type": "Person", "name": "Claude Code Course Builder", "url": "https://claude.ai/code"},
+  "isAccessibleForFree": true,
+  "inLanguage": "en",
+  "hasPart": []
+}
+</script>
+</head>
+<body>
+<div class="book">
+
+  <aside class="sidebar">
+    <a class="brand" href="index.html">Agent <span class="accent">Sandboxes</span></a>
+    <p class="tagline">AWS Lambda MicroVMs in production</p>
+
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+
+    <nav aria-label="Chapters">
+      <div class="toc-part-label">Part I · Foundations</div>
+      <ul>
+        <li><a href="chapters/ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="chapters/ch02.html"><span class="ch-num">2</span>Understanding Firecracker</a></li>
+        <li><a href="chapters/ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ul>
+
+      <div class="toc-part-label">Part II · Getting Started</div>
+      <ul>
+        <li><a href="chapters/ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="chapters/ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="chapters/ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ul>
+
+      <div class="toc-part-label">Part III · Building an Agent Sandbox</div>
+      <ul>
+        <li><a href="chapters/ch07.html"><span class="ch-num">7</span>Executing Untrusted Code</a></li>
+        <li><a href="chapters/ch08.html"><span class="ch-num">8</span>Package Management</a></li>
+        <li><a href="chapters/ch09.html"><span class="ch-num">9</span>File System Isolation</a></li>
+        <li><a href="chapters/ch10.html"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ul>
+
+      <div class="toc-part-label">Part IV · Advanced Patterns</div>
+      <ul>
+        <li><a href="chapters/ch11.html"><span class="ch-num">11</span>Multi-Tenant Isolation</a></li>
+        <li><a href="chapters/ch12.html"><span class="ch-num">12</span>Security Hardening</a></li>
+        <li><a href="chapters/ch13.html"><span class="ch-num">13</span>Observability and Debugging</a></li>
+        <li><a href="chapters/ch14.html"><span class="ch-num">14</span>Production Patterns</a></li>
+      </ul>
+
+      <div class="toc-part-label">Part V · Real-World Systems</div>
+      <ul>
+        <li><a href="chapters/ch15.html"><span class="ch-num">15</span>AI Coding Assistant Pattern</a></li>
+        <li><a href="chapters/ch16.html"><span class="ch-num">16</span>Security Testing Sandbox</a></li>
+        <li><a href="chapters/ch17.html"><span class="ch-num">17</span>Beyond Lambda MicroVMs</a></li>
+      </ul>
+    </nav>
+
+    <button class="theme-toggle" type="button">☾ Dark mode</button>
+  </aside>
+
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">☰ Chapters</button>
+
+  <main>
+    <article class="cover">
+      <p class="kicker">A hands-on course</p>
+      <h1>Building <em style="color:var(--brand);font-style:normal">Agent Sandboxes</em></h1>
+      <p class="lede">
+        Learn how to safely execute untrusted code in isolated VM-level environments using AWS Lambda MicroVMs and Firecracker. This course walks you through building production-ready agent sandboxes for AI coding assistants, security testing, and multi-tenant applications—with runnable Python examples, failing-test challenges, and inline citations to official AWS and Firecracker documentation.
+      </p>
+      <p>
+        Click <a href="{{CODESPACES_URL}}" target="_blank" rel="noopener"><strong>Launch Codespace</strong></a>
+        in the sidebar for a ready-to-go environment with Python and the AWS CLI already configured, or clone the
+        <a href="{{REPO_URL}}" target="_blank" rel="noopener">repo</a> and run
+        <code>pip install -e .</code> locally.
+      </p>
+
+      <div class="toc-parts">
+        <section class="toc-part">
+          <h2>Part I · Foundations</h2>
+          <ol>
+            <li><a href="chapters/ch01.html"><span class="ch-num">1</span><span><span class="ch-title">Why Agent Sandboxes Matter</span><span class="ch-desc">The security problem of running untrusted code, what can go wrong, and when VM-level isolation is the right choice.</span></span></a></li>
+            <li><a href="chapters/ch02.html"><span class="ch-num">2</span><span><span class="ch-title">Understanding Firecracker MicroVMs</span><span class="ch-desc">How Firecracker differs from Docker and traditional VMs, the minimal five-device model, and <125ms startup.</span></span></a></li>
+            <li><a href="chapters/ch03.html"><span class="ch-num">3</span><span><span class="ch-title">Lambda MicroVMs Architecture</span><span class="ch-desc">Image-based deployment, suspend/resume lifecycle, state persistence, and authentication with JWE tokens.</span></span></a></li>
+          </ol>
+        </section>
+
+        <section class="toc-part">
+          <h2>Part II · Getting Started with Lambda MicroVMs</h2>
+          <ol start="4">
+            <li><a href="chapters/ch04.html"><span class="ch-num">4</span><span><span class="ch-title">Your First MicroVM Image</span><span class="ch-desc">Writing a Dockerfile, creating a Flask app, and using CreateMicrovmImage to build and snapshot.</span></span></a></li>
+            <li><a href="chapters/ch05.html"><span class="ch-num">5</span><span><span class="ch-title">Launching and Connecting</span><span class="ch-desc">RunMicrovm with idle policies, authentication tokens, and making your first request.</span></span></a></li>
+            <li><a href="chapters/ch06.html"><span class="ch-num">6</span><span><span class="ch-title">Lifecycle Management</span><span class="ch-desc">Manual suspend/resume, auto-suspension for cost optimization, and graceful termination.</span></span></a></li>
+          </ol>
+        </section>
+
+        <section class="toc-part">
+          <h2>Part III · Building an Agent Sandbox</h2>
+          <ol start="7">
+            <li><a href="chapters/ch07.html"><span class="ch-num">7</span><span><span class="ch-title">Executing Untrusted Code</span><span class="ch-desc">Designing a code execution API, capturing output, timeout handling, and security boundaries.</span></span></a></li>
+            <li><a href="chapters/ch08.html"><span class="ch-num">8</span><span><span class="ch-title">Package Management and Dependencies</span><span class="ch-desc">Runtime vs. image-time installation, using pip inside the MicroVM, and caching strategies.</span></span></a></li>
+            <li><a href="chapters/ch09.html"><span class="ch-num">9</span><span><span class="ch-title">File System Isolation</span><span class="ch-desc">Understanding persistent storage, cleaning up user files, quota management, and disk limits.</span></span></a></li>
+            <li><a href="chapters/ch10.html"><span class="ch-num">10</span><span><span class="ch-title">Resource Limits and Quotas</span><span class="ch-desc">CPU/memory configuration, preventing resource exhaustion, and the 8-hour maximum runtime.</span></span></a></li>
+          </ol>
+        </section>
+
+        <section class="toc-part">
+          <h2>Part IV · Advanced Patterns</h2>
+          <ol start="11">
+            <li><a href="chapters/ch11.html"><span class="ch-num">11</span><span><span class="ch-title">Multi-Tenant Isolation</span><span class="ch-desc">One MicroVM per user vs. shared instances, session management, and cost/security tradeoffs.</span></span></a></li>
+            <li><a href="chapters/ch12.html"><span class="ch-num">12</span><span><span class="ch-title">Security Hardening</span><span class="ch-desc">Network restrictions, validating user code, monitoring malicious behavior, and Firecracker's layers.</span></span></a></li>
+            <li><a href="chapters/ch13.html"><span class="ch-num">13</span><span><span class="ch-title">Observability and Debugging</span><span class="ch-desc">CloudWatch integration, tracing execution, debugging failures, and cost monitoring.</span></span></a></li>
+            <li><a href="chapters/ch14.html"><span class="ch-num">14</span><span><span class="ch-title">Production Patterns</span><span class="ch-desc">Image versioning, blue/green deployment, scaling decisions, and designing for the 8-hour limit.</span></span></a></li>
+          </ol>
+        </section>
+
+        <section class="toc-part">
+          <h2>Part V · Real-World Agent Systems</h2>
+          <ol start="15">
+            <li><a href="chapters/ch15.html"><span class="ch-num">15</span><span><span class="ch-title">AI Coding Assistant Pattern</span><span class="ch-desc">How Claude Code and Cursor use sandboxes, REPL in a MicroVM, and integrating with LLM tool calling.</span></span></a></li>
+            <li><a href="chapters/ch16.html"><span class="ch-num">16</span><span><span class="ch-title">Security Testing Sandbox</span><span class="ch-desc">Running vulnerability scanners, malware analysis, network isolation, and forensic snapshots.</span></span></a></li>
+            <li><a href="chapters/ch17.html"><span class="ch-num">17</span><span><span class="ch-title">Beyond Lambda MicroVMs</span><span class="ch-desc">Self-hosted Firecracker, the jailer tool, alternatives like gVisor, and the future of MicroVMs.</span></span></a></li>
+          </ol>
+        </section>
+      </div>
+    </article>
+  </main>
+</div>
+<script src="assets/vendor/highlight.min.js"></script>
+<script src="assets/book.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# {{COURSE_TITLE}}
+
+<!--
+  Follows the llmstxt.org convention: H1 title, a blockquote one-liner,
+  then H2 sections. Below is the same {{ONE_TO_TWO_SENTENCE_TAGLINE}} the
+  README uses (reuse it verbatim — one description to keep accurate, not
+  two) plus one line on what makes the content trustworthy (real citations,
+  real tests) if that's true here.
+-->
+> {{ONE_TO_TWO_SENTENCE_TAGLINE}}
+
+{{ONE_SENTENCE_ON_HOW_THIS_COURSE_IS_VERIFIED}}
+
+<!--
+  One H2 per part, one bullet per chapter under it — mirrors the book's own
+  table of contents exactly (pull straight from book/index.html's
+  toc-parts so this can't drift). Each bullet is a real, absolute URL plus
+  the chapter's own one-line hook, not a restatement of the title.
+-->
+## Part {{PART_ROMAN}} · {{PART_TITLE}}
+
+- [{{CHAPTER_TITLE}}]({{PAGES_URL}}chapters/ch{{CH_NUM_PADDED}}.html): {{ONE_LINE_CHAPTER_HOOK}}
+
+## Optional
+
+- [Source repo]({{REPO_URL}}): runnable examples, failing-test challenges, and reference solutions
+<!-- Only include the Codespaces line if this course actually has live infra / a devcontainer. -->
+- [Open in GitHub Codespaces]({{CODESPACES_URL}}): zero-install environment with {{WHAT_S_ALREADY_RUNNING}}

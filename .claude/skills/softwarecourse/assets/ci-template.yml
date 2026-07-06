@@ -1,0 +1,101 @@
+# CI template — this exact file (lint + format-check + type-check + the
+# test-suite-twice pattern) is what was verified working end to end against
+# the reference SQLAlchemy course: pushed for real, watched go green on
+# GitHub Actions, including a devcontainer-smoke-test job that builds the
+# actual devcontainer.json and runs a real example inside it. Adapt the
+# tool names for a non-Python ecosystem (see SKILL.md), but keep the shape:
+# lint, format-check, type-check, "skeletons must still fail," "solutions
+# must pass," and — if a devcontainer exists — the smoke-test job.
+#
+# Every "{{TOKEN}}" below is quoted only so this file parses as valid YAML
+# while it's still a template — replace the whole quoted token with real,
+# unquoted YAML (a real service block, a real env mapping, etc.), don't
+# just fill the placeholder text in between the quotes.
+name: CI
+
+on:
+  push:
+    branches: ["{{DEFAULT_BRANCH}}"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # DELETE this whole `services:` block if the course has no live infra.
+    # Match image/env/port exactly to compose.yaml so CI exercises the same
+    # database a local reader gets — copy the credentials and any
+    # non-default port (e.g. PGPORT) from there, don't invent new ones.
+    services:
+      "{{SERVICE_NAME}}":
+        image: "{{SAME_IMAGE_AS_COMPOSE_YAML}}"
+        env:
+          "{{ENV_VAR_NAME}}": "{{ENV_VAR_VALUE}}"
+          # ...one line per env var compose.yaml's service actually sets...
+        ports:
+          - "{{PORT}}:{{PORT}}"
+        options: >-
+          --health-cmd "{{HEALTHCHECK_FROM_COMPOSE_YAML}}"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Swap this step for the ecosystem's own setup action:
+      #   Python: astral-sh/setup-uv@v5 (with python-version input)
+      #   Node:   actions/setup-node@v4 (with node-version + cache: npm)
+      #   Rust:   dtolnay/rust-toolchain@stable
+      #   Go:     actions/setup-go@v5
+      - name: Install toolchain
+        uses: "{{ECOSYSTEM_SETUP_ACTION}}"
+
+      - name: Install dependencies
+        run: "{{INSTALL_COMMAND}}"
+
+      - name: Lint
+        run: "{{LINT_COMMAND}}"
+
+      - name: Format check
+        run: "{{FORMAT_CHECK_COMMAND}}"
+
+      - name: Type-check
+        run: "{{TYPE_CHECK_COMMAND}}"
+
+      # This pair is the one non-obvious piece: a challenge suite whose
+      # tests pass against the untouched skeleton isn't testing anything,
+      # so CI asserts BOTH directions, not just that solutions pass.
+      - name: Skeletons must still fail (they're unfinished by design)
+        run: |
+          if {{CHALLENGE_TEST_COMMAND}}; then
+            echo "::error::challenges passed against the untouched skeletons — a challenge test isn't testing anything"
+            exit 1
+          fi
+
+      - name: Reference solutions must pass every challenge test
+        run: "{{SOLUTIONS_ENV_VAR}}=1 {{CHALLENGE_TEST_COMMAND}}"
+
+  # DELETE this whole job if the course has no devcontainer. Otherwise this
+  # is the only thing that catches a Codespaces-specific regression (a bad
+  # feature version, a port mismatch inside the shared network namespace, a
+  # postCreateCommand that silently fails) automatically — it builds the
+  # REAL .devcontainer/devcontainer.json, not an approximation of it, the
+  # same file a reader's own Codespace uses.
+  devcontainer-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the devcontainer and run a real example inside it
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/${{ github.repository }}-devcontainer
+          push: never
+          runCmd: |
+            set -e
+            {{INSTALL_COMMAND}}
+            {{ONE_REAL_EXAMPLE_COMMAND}}
+            {{SOLUTIONS_ENV_VAR}}=1 {{CHALLENGE_TEST_COMMAND}}
