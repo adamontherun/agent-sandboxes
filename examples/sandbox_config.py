@@ -57,6 +57,13 @@ INGRESS_PORT = int(os.environ.get("MICROVM_INGRESS_PORT", "8080"))
 # app; set MICROVM_REQUEST_PATH to your app's route (e.g. /health) if needed.
 REQUEST_PATH = os.environ.get("MICROVM_REQUEST_PATH", "/")
 
+# Base MicroVM image the examples build on top of. al2023-1 is the current
+# Lambda-managed base; override with MICROVM_BASE_IMAGE_ARN if a newer one ships.
+BASE_IMAGE_ARN = (
+    os.environ.get("MICROVM_BASE_IMAGE_ARN")
+    or f"arn:aws:lambda:{REGION}:aws:microvm-image:al2023-1"
+)
+
 
 def _require(env_name: str) -> str:
     """Return the value of ``env_name`` or exit with setup instructions."""
@@ -84,3 +91,8 @@ def execution_role_arn() -> str:
 def build_role_arn() -> str:
     """IAM role used to build MicroVM images."""
     return _require("MICROVM_BUILD_ROLE_ARN")
+
+
+def code_artifact_uri() -> str:
+    """S3 URI of the zipped Dockerfile + app used to build an image (ch04)."""
+    return _require("MICROVM_CODE_ARTIFACT_URI")

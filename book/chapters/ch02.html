@@ -115,7 +115,7 @@
           <li>Startup in under 125 milliseconds</li>
           <li>Memory overhead under 5 MiB per microVM</li>
           <li>Creation rate of up to 150 microVMs per second on a single host</li>
-          <li>Only 5 emulated devices (vs. dozens in QEMU)</li>
+          <li>Only about five core devices (vs. dozens in QEMU)</li>
         </ul>
 
         <div class="callout callout-info">
@@ -178,7 +178,7 @@
 
         <p>Every emulated device in a VMM is code that processes input from the guest. A bug in any device emulation is a potential guest-to-host escape. QEMU emulates IDE controllers, floppy drives, VGA adapters, USB hubs, and more &mdash; most of which a serverless function never touches.</p>
 
-        <p>Firecracker exposes exactly five devices:</p>
+        <p>Firecracker's core device model is just five devices &mdash; three of them paravirtualized (virtio) and two legacy:</p>
 
         <ol>
           <li><strong>virtio-net</strong> &mdash; Network interface. TAP-backed, high-performance paravirtualized networking.</li>
@@ -188,7 +188,7 @@
           <li><strong>i8042 keyboard controller</strong> &mdash; Used only to signal system reset (Ctrl+Alt+Del equivalent). No actual keyboard input is processed.</li>
         </ol>
 
-        <p>That is it. No USB, no PCI bridge, no display, no sound, no ACPI beyond the basics. Each device that does not exist is an entire class of vulnerabilities that cannot happen.</p>
+        <p>That is the minimal core. Recent Firecracker versions can optionally attach a few more paravirtual devices &mdash; a <code>virtio-rng</code> entropy source, a <code>virtio-balloon</code> for reclaiming guest memory, and <code>virtio-pmem</code> &mdash; but they are opt-in, so the default surface stays tiny. No USB, no PCI bridge, no display, no sound, no ACPI beyond the basics. Each device that does not exist is an entire class of vulnerabilities that cannot happen.</p>
 
         <div class="callout callout-warning">
           <p><strong>Production tip:</strong> The virtio devices use paravirtualization &mdash; the guest kernel knows it is in a VM and cooperates with a simple, well-defined protocol. This is both faster and simpler to audit than emulating real hardware behavior that was never designed for security.</p>
@@ -233,7 +233,7 @@
         <p>The critical point: the guest code runs directly on the physical CPU. KVM is not interpreting instructions. When the guest does arithmetic, calls functions, or accesses its own memory, those operations happen at native speed. KVM only intervenes for privileged operations like I/O.</p>
 
         <div class="callout callout-info">
-          <p><strong>Under the hood:</strong> A "VM exit" happens when the guest tries to access a device port, execute a <code>CPUID</code> instruction, or touch memory that is not mapped. The CPU traps to KVM, which routes the exit to the userspace VMM (Firecracker). Firecracker handles it (e.g., processes a virtio-net packet) and resumes the guest. Minimizing these exits is key to performance &mdash; and having only 5 devices means fewer reasons for the guest to exit.</p>
+          <p><strong>Under the hood:</strong> A "VM exit" happens when the guest tries to access a device port, execute a <code>CPUID</code> instruction, or touch memory that is not mapped. The CPU traps to KVM, which routes the exit to the userspace VMM (Firecracker). Firecracker handles it (e.g., processes a virtio-net packet) and resumes the guest. Minimizing these exits is key to performance &mdash; and having so few devices means fewer reasons for the guest to exit.</p>
         </div>
 
         <h3>Security Layers in Firecracker</h3>
@@ -281,7 +281,7 @@
         <p>Traditional VM boot is slow because QEMU emulates BIOS/UEFI firmware, probes devices, initializes PCI buses, and loads bootloaders. Firecracker skips all of that:</p>
         <ul>
           <li>No BIOS or UEFI. Firecracker loads the kernel directly into memory and sets up boot parameters itself.</li>
-          <li>No device probing. The guest kernel is compiled to expect exactly the 5 virtio devices.</li>
+          <li>No device probing. The guest kernel is compiled to expect just this minimal set of devices.</li>
           <li>No bootloader chain. The kernel starts executing immediately.</li>
           <li>Minimal memory allocation. Only the 5 MiB VMM overhead plus whatever you allocate to the guest.</li>
         </ul>
@@ -298,7 +298,7 @@
         <p>The under-5-MiB overhead covers:</p>
         <ul>
           <li>The Firecracker process itself (Rust binary, statically linked)</li>
-          <li>Data structures for the 5 virtio device backends</li>
+          <li>Data structures for the three virtio device backends (net, block, vsock)</li>
           <li>KVM-related structures in the kernel</li>
           <li>Page tables for the guest physical-to-host virtual memory mapping</li>
         </ul>

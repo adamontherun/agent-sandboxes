@@ -58,13 +58,10 @@ def run_aws(*args):
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
-def build_image(
-    name: str, bucket: str, artifact_key: str, build_role_arn: str, base_image_arn: str
-):
+def build_image(name: str, code_artifact_uri: str, build_role_arn: str, base_image_arn: str):
     """Build a new MicroVM image and wait for completion."""
 
-    s3_uri = f"s3://{bucket}/{artifact_key}"
-    print(f"Building image '{name}' from {s3_uri}...")
+    print(f"Building image '{name}' from {code_artifact_uri}...")
 
     response = run_aws(
         "create-microvm-image",
@@ -75,7 +72,7 @@ def build_image(
         "--build-role-arn",
         build_role_arn,
         "--code-artifact",
-        f"uri={s3_uri}",
+        f"uri={code_artifact_uri}",
     )
 
     image_arn = response["imageArn"]
@@ -125,8 +122,7 @@ if __name__ == "__main__":
     # .env.example and the README's "Following along with AWS" section.
     build_image(
         name="ch04-hello-sandbox",
-        bucket="my-bucket",
-        artifact_key="ch04-hello-sandbox/artifact.zip",
+        code_artifact_uri=sandbox_config.code_artifact_uri(),
         build_role_arn=sandbox_config.build_role_arn(),
-        base_image_arn="arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1",
+        base_image_arn=sandbox_config.BASE_IMAGE_ARN,
     )
