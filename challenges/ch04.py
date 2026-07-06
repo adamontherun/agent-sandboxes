@@ -27,8 +27,9 @@ def validate_create_image_params(params: dict) -> list[str]:
     raise NotImplementedError
 
 
-def generate_dockerfile(base_image: str, app_file: str, packages: list[str],
-                        port: int = 5000) -> str:
+def generate_dockerfile(
+    base_image: str, app_file: str, packages: list[str], port: int = 5000
+) -> str:
     """
     Generate a Dockerfile string for a Lambda MicroVM image.
 

@@ -9,9 +9,7 @@ class InvalidTransitionError(Exception):
     def __init__(self, current_state: str, action: str):
         self.current_state = current_state
         self.action = action
-        super().__init__(
-            f"Cannot '{action}' from state '{current_state}'"
-        )
+        super().__init__(f"Cannot '{action}' from state '{current_state}'")
 
 
 class MicrovmLifecycle:

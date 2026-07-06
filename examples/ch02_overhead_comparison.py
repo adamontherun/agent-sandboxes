@@ -28,12 +28,15 @@ def main():
     print("=" * 78)
     print("Resource Overhead Comparison: Isolation Approaches on a 64 GB Host")
     print("=" * 78)
-    print(f"\nAssumptions:")
+    print("\nAssumptions:")
     print(f"  - Host memory: {HOST_MEMORY_GB} GB ({HOST_MEMORY_MIB} MiB)")
-    print(f"  - Application memory per instance: 128 MiB")
+    print("  - Application memory per instance: 128 MiB")
     print()
 
-    header = f"{'Approach':<25} {'Overhead':<12} {'Total/inst':<12} {'Max Instances':<15} {'Startup':<10}"
+    header = (
+        f"{'Approach':<25} {'Overhead':<12} {'Total/inst':<12} "
+        f"{'Max Instances':<15} {'Startup':<10}"
+    )
     print(header)
     print("-" * len(header))
 
@@ -41,7 +44,8 @@ def main():
         total = overhead + app_mem
         instances = max_instances(HOST_MEMORY_MIB, overhead, app_mem)
         print(
-            f"{name:<25} {overhead:>4} MiB    {total:>5} MiB    {instances:>8}        {startup:>5} ms"
+            f"{name:<25} {overhead:>4} MiB    {total:>5} MiB    "
+            f"{instances:>8}        {startup:>5} ms"
         )
 
     print()

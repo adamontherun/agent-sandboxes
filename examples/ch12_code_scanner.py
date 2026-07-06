@@ -81,9 +81,7 @@ class CodeScanner(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:
         qualified = self._qualified_name(node.func)
-        if qualified in DANGEROUS_CALLS:
-            self.violations.append(f"line {node.lineno}: call to '{qualified}' is blocked")
-        elif qualified in DANGEROUS_BUILTINS:
+        if qualified in DANGEROUS_CALLS or qualified in DANGEROUS_BUILTINS:
             self.violations.append(f"line {node.lineno}: call to '{qualified}' is blocked")
         # subprocess.run(..., shell=True) / os.system-style shell invocation
         # via any call is doubly dangerous - flag shell=True regardless of

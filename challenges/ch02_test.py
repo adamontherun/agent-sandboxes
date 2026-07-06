@@ -1,8 +1,9 @@
 """Tests for Chapter 2 challenge functions."""
 
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 # Allow importing from both challenges/ and solutions/
 sys.path.insert(0, os.path.dirname(__file__))

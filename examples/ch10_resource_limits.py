@@ -16,7 +16,10 @@ from ch10 import ExecutionRequest, ResourcePolicy, evaluate_request
 def show(label: str, req: ExecutionRequest, policy: ResourcePolicy) -> None:
     decision = evaluate_request(req, policy)
     print(f"\n[{label}]")
-    print(f"  request: timeout={req.timeout_seconds}s memory={req.memory_mb}MB code_len={len(req.code)}")
+    print(
+        f"  request: timeout={req.timeout_seconds}s "
+        f"memory={req.memory_mb}MB code_len={len(req.code)}"
+    )
     print(f"  allowed: {decision.allowed}")
     if decision.reason:
         print(f"  reason:  {decision.reason}")

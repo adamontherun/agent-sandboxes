@@ -18,9 +18,9 @@ Real output captured from a live run (account ID redacted):
 """
 
 import json
-import time
 import subprocess
 import sys
+import time
 
 
 def run_aws(*args):
@@ -46,11 +46,13 @@ def wait_for_state(microvm_id: str, target_state: str, timeout: int = 30):
 def full_lifecycle_demo(image_arn: str, execution_role_arn: str):
     """Run through the complete MicroVM lifecycle."""
 
-    idle_policy = json.dumps({
-        "maxIdleDurationSeconds": 300,
-        "suspendedDurationSeconds": 300,
-        "autoResumeEnabled": True,
-    })
+    idle_policy = json.dumps(
+        {
+            "maxIdleDurationSeconds": 300,
+            "suspendedDurationSeconds": 300,
+            "autoResumeEnabled": True,
+        }
+    )
 
     # 1. Launch
     print("=" * 60)
@@ -58,16 +60,19 @@ def full_lifecycle_demo(image_arn: str, execution_role_arn: str):
     print("=" * 60)
     response = run_aws(
         "run-microvm",
-        "--image-identifier", image_arn,
-        "--execution-role-arn", execution_role_arn,
-        "--idle-policy", idle_policy,
+        "--image-identifier",
+        image_arn,
+        "--execution-role-arn",
+        execution_role_arn,
+        "--idle-policy",
+        idle_policy,
     )
     microvm_id = response["microvmId"]
     print(f"  ID: {microvm_id}")
     print(f"  Initial state: {response['state']}")
 
     status = wait_for_state(microvm_id, "RUNNING")
-    print(f"  Confirmed: state=RUNNING")
+    print("  Confirmed: state=RUNNING")
     print()
 
     # 2. Suspend
@@ -78,7 +83,7 @@ def full_lifecycle_demo(image_arn: str, execution_role_arn: str):
     result = run_aws("suspend-microvm", "--microvm-identifier", microvm_id)
     print(f"  Response body: {result}")  # Empty dict - no body returned
     status = wait_for_state(microvm_id, "SUSPENDED")
-    print(f"  Confirmed: state=SUSPENDED")
+    print("  Confirmed: state=SUSPENDED")
     print()
 
     # 3. Resume
@@ -89,7 +94,7 @@ def full_lifecycle_demo(image_arn: str, execution_role_arn: str):
     result = run_aws("resume-microvm", "--microvm-identifier", microvm_id)
     print(f"  Response body: {result}")  # Empty dict - no body returned
     status = wait_for_state(microvm_id, "RUNNING")
-    print(f"  Confirmed: state=RUNNING")
+    print("  Confirmed: state=RUNNING")
     print()
 
     # 4. Terminate
@@ -121,7 +126,8 @@ def full_lifecycle_demo(image_arn: str, execution_role_arn: str):
 
 
 if __name__ == "__main__":
-    IMAGE_ARN = "arn:aws:lambda:us-east-1:<your-account-id>:microvm-image:lambda-microvms-poc-hello-world"
-    ROLE_ARN = "arn:aws:iam::<your-account-id>:role/MicroVMLambdaPOCRole"
+    import sandbox_config
 
-    full_lifecycle_demo(IMAGE_ARN, ROLE_ARN)
+    # Account-specific values come from your .env / environment — see
+    # .env.example and the README's "Following along with AWS" section.
+    full_lifecycle_demo(sandbox_config.image_arn(), sandbox_config.execution_role_arn())

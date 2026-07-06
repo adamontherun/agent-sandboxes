@@ -22,19 +22,19 @@ def validate_create_image_params(params: dict) -> list[str]:
         name = params["name"]
         if not isinstance(name, str) or len(name) == 0 or len(name) > 64:
             errors.append("name must be 1-64 characters")
-        elif not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-]*$', name):
+        elif not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9\-]*$", name):
             errors.append("name must contain only alphanumeric characters and hyphens")
 
     # base_image_arn validation
     if "base_image_arn" in params:
         arn = params["base_image_arn"]
-        if not re.match(r'^arn:aws:lambda:[a-z0-9\-]+:(aws|\d{12}):microvm-image:', arn):
+        if not re.match(r"^arn:aws:lambda:[a-z0-9\-]+:(aws|\d{12}):microvm-image:", arn):
             errors.append("base_image_arn must be a valid Lambda MicroVM image ARN")
 
     # build_role_arn validation
     if "build_role_arn" in params:
         arn = params["build_role_arn"]
-        if not re.match(r'^arn:aws:iam::\d{12}:role/', arn):
+        if not re.match(r"^arn:aws:iam::\d{12}:role/", arn):
             errors.append("build_role_arn must be a valid IAM role ARN")
 
     # code_artifact validation (tagged union: exactly one key "uri")
@@ -64,8 +64,9 @@ def validate_create_image_params(params: dict) -> list[str]:
     return errors
 
 
-def generate_dockerfile(base_image: str, app_file: str, packages: list[str],
-                        port: int = 5000) -> str:
+def generate_dockerfile(
+    base_image: str, app_file: str, packages: list[str], port: int = 5000
+) -> str:
     """
     Generate a Dockerfile string for a Lambda MicroVM image.
     """

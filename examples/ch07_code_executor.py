@@ -116,7 +116,10 @@ except ImportError:
 SNIPPETS = [
     ("hello world", "print('hello from inside the sandbox')"),
     ("a computation", "print(sum(i * i for i in range(100)))"),
-    ("writes to stderr", "import sys\nsys.stderr.write('warning: something noisy\\n')\nprint('done anyway')"),
+    (
+        "writes to stderr",
+        "import sys\nsys.stderr.write('warning: something noisy\\n')\nprint('done anyway')",
+    ),
     ("a crash", "raise ValueError('this snippet intentionally throws')"),
     ("an infinite loop", "while True:\n    pass"),
 ]

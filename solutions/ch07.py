@@ -32,8 +32,9 @@ def build_command(script_path: str) -> list[str]:
     return ["python3", script_path]
 
 
-def summarize_result(stdout: str, stderr: str, exit_code: int | None,
-                      timed_out: bool) -> ExecutionResult:
+def summarize_result(
+    stdout: str, stderr: str, exit_code: int | None, timed_out: bool
+) -> ExecutionResult:
     return ExecutionResult(stdout=stdout, stderr=stderr, exit_code=exit_code, timed_out=timed_out)
 
 

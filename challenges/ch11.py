@@ -6,12 +6,13 @@ dedicated MicroVM or a slot in a shared pool, and to clean shared state when
 a slot changes owners. See book/chapters/ch11.html for details.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class RoutingDecision:
     """Result of routing a tenant to a MicroVM slot."""
+
     microvm_id: str
     dedicated: bool
     reused: bool

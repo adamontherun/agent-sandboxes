@@ -55,14 +55,16 @@ class Session:
         target = self._resolve(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content)
-        return ToolResult(ok=True, output=f"wrote {len(content)} bytes to {path}",
-                           detail={"path": path, "bytes": len(content)})
+        return ToolResult(
+            ok=True,
+            output=f"wrote {len(content)} bytes to {path}",
+            detail={"path": path, "bytes": len(content)},
+        )
 
     def read_file(self, path: str) -> ToolResult:
         target = self._resolve(path)
         if not target.exists():
-            return ToolResult(ok=False, output=f"no such file: {path}",
-                               detail={"path": path})
+            return ToolResult(ok=False, output=f"no such file: {path}", detail={"path": path})
         content = target.read_text()
         return ToolResult(ok=True, output=content, detail={"path": path})
 
@@ -76,16 +78,27 @@ class Session:
                 timeout=timeout,
             )
         except subprocess.TimeoutExpired:
-            return ToolResult(ok=False, output=f"command timed out after {timeout}s",
-                               detail={"command": command, "exit_code": None})
+            return ToolResult(
+                ok=False,
+                output=f"command timed out after {timeout}s",
+                detail={"command": command, "exit_code": None},
+            )
         except FileNotFoundError as exc:
-            return ToolResult(ok=False, output=str(exc),
-                               detail={"command": command, "exit_code": None})
+            return ToolResult(
+                ok=False, output=str(exc), detail={"command": command, "exit_code": None}
+            )
         ok = proc.returncode == 0
         output = proc.stdout + proc.stderr
-        return ToolResult(ok=ok, output=output,
-                           detail={"command": command, "exit_code": proc.returncode,
-                                   "stdout": proc.stdout, "stderr": proc.stderr})
+        return ToolResult(
+            ok=ok,
+            output=output,
+            detail={
+                "command": command,
+                "exit_code": proc.returncode,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+            },
+        )
 
     def _resolve(self, path: str) -> Path:
         # Scope every path to self.root, the way a real sandbox scopes

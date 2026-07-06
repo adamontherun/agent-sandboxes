@@ -10,13 +10,13 @@ from launching a sandbox for code you can reject in milliseconds.
 
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass, field
 
 
 @dataclass
 class ScanResult:
     """Result of scanning one snippet of code."""
+
     safe: bool
     violations: list[str] = field(default_factory=list)
 

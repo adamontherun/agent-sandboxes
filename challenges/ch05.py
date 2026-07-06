@@ -7,10 +7,13 @@ in a real SDK wrapper around the Lambda MicroVMs API.
 """
 
 
-def build_run_microvm_params(image_arn: str, execution_role_arn: str,
-                             max_idle_seconds: int = 300,
-                             suspended_duration_seconds: int = 300,
-                             auto_resume: bool = True) -> dict:
+def build_run_microvm_params(
+    image_arn: str,
+    execution_role_arn: str,
+    max_idle_seconds: int = 300,
+    suspended_duration_seconds: int = 300,
+    auto_resume: bool = True,
+) -> dict:
     """
     Build the parameters dictionary for a RunMicrovm API call.
 
@@ -35,8 +38,9 @@ def build_run_microvm_params(image_arn: str, execution_role_arn: str,
     raise NotImplementedError
 
 
-def build_auth_token_params(microvm_id: str, expiration_minutes: int = 15,
-                            allowed_ports: list | None = None) -> dict:
+def build_auth_token_params(
+    microvm_id: str, expiration_minutes: int = 15, allowed_ports: list | None = None
+) -> dict:
     """
     Build parameters for a CreateMicrovmAuthToken API call.
 

@@ -1,7 +1,6 @@
 """Tests for Chapter 4 challenge: validate_create_image_params and generate_dockerfile"""
 
-import pytest
-from ch04 import validate_create_image_params, generate_dockerfile
+from ch04 import generate_dockerfile, validate_create_image_params
 
 
 class TestValidateCreateImageParams:
@@ -159,23 +158,20 @@ class TestValidateCreateImageParams:
 class TestGenerateDockerfile:
     def test_contains_from(self):
         result = generate_dockerfile(
-            "public.ecr.aws/lambda/microvms:al2023-minimal",
-            "app.py", ["flask"]
+            "public.ecr.aws/lambda/microvms:al2023-minimal", "app.py", ["flask"]
         )
         assert "FROM public.ecr.aws/lambda/microvms:al2023-minimal" in result
 
     def test_contains_copy(self):
         result = generate_dockerfile(
-            "public.ecr.aws/lambda/microvms:al2023-minimal",
-            "app.py", ["flask"]
+            "public.ecr.aws/lambda/microvms:al2023-minimal", "app.py", ["flask"]
         )
         assert "COPY" in result
         assert "app.py" in result
 
     def test_contains_pip_install(self):
         result = generate_dockerfile(
-            "public.ecr.aws/lambda/microvms:al2023-minimal",
-            "app.py", ["flask", "requests"]
+            "public.ecr.aws/lambda/microvms:al2023-minimal", "app.py", ["flask", "requests"]
         )
         assert "pip" in result.lower()
         assert "flask" in result
@@ -183,16 +179,12 @@ class TestGenerateDockerfile:
 
     def test_contains_cmd(self):
         result = generate_dockerfile(
-            "public.ecr.aws/lambda/microvms:al2023-minimal",
-            "server.py", ["fastapi"]
+            "public.ecr.aws/lambda/microvms:al2023-minimal", "server.py", ["fastapi"]
         )
         assert "CMD" in result or "ENTRYPOINT" in result
         assert "server.py" in result
 
     def test_empty_packages(self):
-        result = generate_dockerfile(
-            "public.ecr.aws/lambda/microvms:al2023-minimal",
-            "app.py", []
-        )
+        result = generate_dockerfile("public.ecr.aws/lambda/microvms:al2023-minimal", "app.py", [])
         assert "FROM" in result
         assert "app.py" in result

@@ -14,12 +14,13 @@ shape and timing logic you'd wire into a real orchestrator.
 import json
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class ExecutionResult:
     """Result of a sandboxed code execution."""
+
     request_id: str
     status: str  # "success", "error", "timeout"
     output: str = ""
@@ -66,9 +67,20 @@ def execute_sandboxed_code(code: str, timeout_seconds: float = 5.0) -> Execution
         # Simulate execution (in production this would be an HTTP call
         # to the MicroVM's code-execution endpoint)
         namespace = {}
-        safe_builtins = {"sum": sum, "range": range, "len": len, "int": int,
-                         "float": float, "str": str, "list": list, "dict": dict,
-                         "min": min, "max": max, "abs": abs, "round": round}
+        safe_builtins = {
+            "sum": sum,
+            "range": range,
+            "len": len,
+            "int": int,
+            "float": float,
+            "str": str,
+            "list": list,
+            "dict": dict,
+            "min": min,
+            "max": max,
+            "abs": abs,
+            "round": round,
+        }
         exec(code, {"__builtins__": safe_builtins}, namespace)
         output = str(namespace.get("result", ""))
         status = "success"
@@ -113,7 +125,6 @@ def check_microvm_health(microvm_state: dict) -> dict:
     state_reason = microvm_state.get("stateReason", "")
 
     healthy = state in ("RUNNING", "SUSPENDED")
-    needs_attention = state in ("TERMINATED", "FAILED", "UNKNOWN")
 
     result = {
         "healthy": healthy,
@@ -138,8 +149,10 @@ if __name__ == "__main__":
     # Successful execution
     print("--- Successful execution ---")
     result = execute_sandboxed_code("result = sum(range(10))")
-    print(f"  -> status={result.status}, output={result.output!r}, "
-          f"duration={result.duration_ms:.2f}ms\n")
+    print(
+        f"  -> status={result.status}, output={result.output!r}, "
+        f"duration={result.duration_ms:.2f}ms\n"
+    )
 
     # Failing execution
     print("--- Failing execution ---")
@@ -153,11 +166,13 @@ if __name__ == "__main__":
 
     # Health check on a terminated instance (real stateReason from GetMicrovm)
     print("--- Health check: terminated instance ---")
-    health = check_microvm_health({
-        "state": "TERMINATED",
-        "stateReason": "Success.",
-        "terminatedAt": "2026-07-05T21:47:36.936000-10:00",
-    })
+    health = check_microvm_health(
+        {
+            "state": "TERMINATED",
+            "stateReason": "Success.",
+            "terminatedAt": "2026-07-05T21:47:36.936000-10:00",
+        }
+    )
     print(f"  -> healthy={health['healthy']}, action={health['action']}\n")
 
     print("=== Done ===")

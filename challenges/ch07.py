@@ -51,8 +51,9 @@ def build_command(script_path: str) -> list[str]:
     raise NotImplementedError
 
 
-def summarize_result(stdout: str, stderr: str, exit_code: int | None,
-                      timed_out: bool) -> ExecutionResult:
+def summarize_result(
+    stdout: str, stderr: str, exit_code: int | None, timed_out: bool
+) -> ExecutionResult:
     """
     Normalize raw subprocess output into an ExecutionResult.
 

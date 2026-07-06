@@ -8,6 +8,7 @@ from dataclasses import dataclass
 @dataclass
 class RoutingDecision:
     """Result of routing a tenant to a MicroVM slot."""
+
     microvm_id: str
     dedicated: bool
     reused: bool

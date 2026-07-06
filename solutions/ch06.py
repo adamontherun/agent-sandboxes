@@ -3,31 +3,35 @@ Solution: MicroVM Lifecycle Policy Engine
 """
 
 
-def should_suspend(idle_seconds: float, max_idle_duration: int,
-                   current_state: str) -> bool:
+def should_suspend(idle_seconds: float, max_idle_duration: int, current_state: str) -> bool:
     if current_state != "RUNNING":
         return False
     return idle_seconds >= max_idle_duration
 
 
-def should_terminate(suspended_seconds: float, suspended_duration_limit: int,
-                     current_state: str) -> bool:
+def should_terminate(
+    suspended_seconds: float, suspended_duration_limit: int, current_state: str
+) -> bool:
     if current_state != "SUSPENDED":
         return False
     return suspended_seconds >= suspended_duration_limit
 
 
-def should_auto_resume(current_state: str, has_incoming_request: bool,
-                       auto_resume_enabled: bool) -> bool:
+def should_auto_resume(
+    current_state: str, has_incoming_request: bool, auto_resume_enabled: bool
+) -> bool:
     if current_state != "SUSPENDED":
         return False
     return has_incoming_request and auto_resume_enabled
 
 
-def compute_lifecycle_action(state: str, idle_seconds: float,
-                             suspended_seconds: float,
-                             has_incoming_request: bool,
-                             policy: dict) -> str:
+def compute_lifecycle_action(
+    state: str,
+    idle_seconds: float,
+    suspended_seconds: float,
+    has_incoming_request: bool,
+    policy: dict,
+) -> str:
     if state == "TERMINATED" or state == "PENDING":
         return "NONE"
 

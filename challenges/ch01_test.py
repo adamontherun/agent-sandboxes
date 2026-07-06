@@ -1,6 +1,5 @@
 """Tests for Chapter 1 challenge: identify_risks()"""
 
-import pytest
 from ch01 import identify_risks
 
 

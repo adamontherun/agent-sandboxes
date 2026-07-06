@@ -1,8 +1,9 @@
 """Tests for the MicroVM Lifecycle State Machine (Chapter 3 Challenge)."""
 
-import pytest
-import sys
 import os
+import sys
+
+import pytest
 
 # Allow importing from challenges/ or solutions/
 sys.path.insert(0, os.path.dirname(__file__))
@@ -12,9 +13,9 @@ def get_lifecycle_class():
     """Import MicrovmLifecycle - tries solution first if env var set."""
     if os.environ.get("USE_SOLUTION"):
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "solutions"))
-        from ch03 import MicrovmLifecycle, InvalidTransitionError
+        from ch03 import InvalidTransitionError, MicrovmLifecycle
     else:
-        from ch03 import MicrovmLifecycle, InvalidTransitionError
+        from ch03 import InvalidTransitionError, MicrovmLifecycle
     return MicrovmLifecycle, InvalidTransitionError
 
 
@@ -155,7 +156,7 @@ class TestValidTransitionsMethod:
 
 class TestFullLifecyclePath:
     def test_full_cycle_with_resume(self):
-        """Test the complete lifecycle: create -> run -> idle -> suspend -> resume -> idle -> terminate."""
+        """Test the full lifecycle: create -> run -> suspend -> resume -> terminate."""
         vm = MicrovmLifecycle()
         assert vm.state == "CREATING"
 

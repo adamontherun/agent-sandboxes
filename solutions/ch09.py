@@ -2,6 +2,7 @@
 Solution: File system isolation — safe path resolution and workspace cleanup.
 """
 
+import contextlib
 import os
 import shutil
 from dataclasses import dataclass, field
@@ -10,6 +11,7 @@ from dataclasses import dataclass, field
 @dataclass
 class CleanupResult:
     """Result of cleaning a workspace directory."""
+
     removed: list[str] = field(default_factory=list)
     preserved: list[str] = field(default_factory=list)
     bytes_freed: int = 0
@@ -35,9 +37,7 @@ def safe_resolve(root: str, user_path: str) -> str:
     target = os.path.realpath(os.path.join(root_resolved, user_path))
 
     if not target.startswith(root_resolved + os.sep) and target != root_resolved:
-        raise ValueError(
-            f"Path traversal detected: {user_path!r} resolves outside root"
-        )
+        raise ValueError(f"Path traversal detected: {user_path!r} resolves outside root")
 
     return target
 
@@ -62,13 +62,11 @@ def cleanup_workspace(workspace_dir: str, preserve: set[str] | None = None) -> C
             result.bytes_freed += os.path.getsize(entry_path)
             os.unlink(entry_path)
         elif os.path.isdir(entry_path):
-            for dirpath, dirnames, filenames in os.walk(entry_path):
+            for dirpath, _dirnames, filenames in os.walk(entry_path):
                 for f in filenames:
                     fp = os.path.join(dirpath, f)
-                    try:
+                    with contextlib.suppress(OSError):
                         result.bytes_freed += os.path.getsize(fp)
-                    except OSError:
-                        pass
             shutil.rmtree(entry_path)
 
         result.removed.append(entry)

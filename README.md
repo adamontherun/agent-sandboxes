@@ -30,7 +30,20 @@ pip install -e .
 aws configure
 ```
 
-**Note**: Lambda MicroVMs is a preview feature. You'll need AWS account access and appropriate IAM permissions to run the examples against real infrastructure. Many examples also ship an offline simulation path so you can follow along without an AWS account. Examples use the `us-east-1` region by default.
+**Note**: Lambda MicroVMs is a preview feature. Many examples ship an offline simulation path, so you can follow along without an AWS account. Only the examples in Chapters 4–6 make real AWS calls.
+
+## Following along with AWS
+
+To run the Chapter 4–6 examples against your own account, you don't need to edit any code — set your values once in a `.env` file:
+
+```sh
+cp .env.example .env
+# then open .env and fill in your account ID, region, image ARN, and role ARNs
+```
+
+The examples load `.env` automatically. Anything already set in your shell environment (or CI) takes precedence over the file, and `.env` is git-ignored so your values never get committed.
+
+For credentials, either run `aws configure` (the examples shell out to the AWS CLI and use your configured profile) or put `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` directly in the same `.env`. See [`.env.example`](.env.example) for the full list of settings.
 
 ## Doing challenges
 

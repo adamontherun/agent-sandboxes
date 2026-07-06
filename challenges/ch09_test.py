@@ -1,8 +1,9 @@
 """Tests for Chapter 9 challenge: file system isolation."""
 
 import os
+
 import pytest
-from ch09 import safe_resolve, cleanup_workspace, CleanupResult
+from ch09 import CleanupResult, cleanup_workspace, safe_resolve
 
 
 class TestSafeResolve:
@@ -45,7 +46,6 @@ class TestSafeResolve:
         root = str(tmp_path)
         result = safe_resolve(root, "subdir/../file.py")
         assert result == os.path.join(os.path.realpath(root), "file.py")
-
 
 
 class TestCleanupWorkspace:

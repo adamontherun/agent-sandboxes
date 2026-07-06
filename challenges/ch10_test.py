@@ -1,7 +1,6 @@
 """Tests for Chapter 10 challenge: resource limits and quotas."""
 
-import pytest
-from ch10 import evaluate_request, ExecutionRequest, ResourcePolicy, PolicyDecision
+from ch10 import ExecutionRequest, PolicyDecision, ResourcePolicy, evaluate_request
 
 
 class TestEvaluateRequest:
@@ -14,14 +13,14 @@ class TestEvaluateRequest:
         assert result.adjusted_memory is None
 
     def test_blocked_fork_bomb(self):
-        req = ExecutionRequest(code='import os; os.fork()', timeout_seconds=5.0)
+        req = ExecutionRequest(code="import os; os.fork()", timeout_seconds=5.0)
         policy = ResourcePolicy()
         result = evaluate_request(req, policy)
         assert result.allowed is False
         assert "os.fork" in result.reason
 
     def test_blocked_bash_fork_bomb(self):
-        req = ExecutionRequest(code=':(){ :|:& };:', timeout_seconds=5.0)
+        req = ExecutionRequest(code=":(){ :|:& };:", timeout_seconds=5.0)
         policy = ResourcePolicy()
         result = evaluate_request(req, policy)
         assert result.allowed is False

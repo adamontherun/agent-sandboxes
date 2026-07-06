@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 @dataclass
 class ScanResult:
     """Result of scanning one snippet of code."""
+
     safe: bool
     violations: list[str] = field(default_factory=list)
 

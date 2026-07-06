@@ -1,23 +1,28 @@
 """Tests for Chapter 5 challenge: RunMicrovm params, auth token params, status parsing"""
 
 import pytest
-from ch05 import build_run_microvm_params, build_auth_token_params, parse_microvm_status
+from ch05 import build_auth_token_params, build_run_microvm_params, parse_microvm_status
 
 
 class TestBuildRunMicrovmParams:
     def test_basic_params(self):
         result = build_run_microvm_params(
             "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image",
-            "arn:aws:iam::123456789012:role/MyRole"
+            "arn:aws:iam::123456789012:role/MyRole",
         )
-        assert result["imageIdentifier"] == "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image"
+        assert (
+            result["imageIdentifier"]
+            == "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image"
+        )
         assert result["executionRoleArn"] == "arn:aws:iam::123456789012:role/MyRole"
 
     def test_idle_policy_all_three_fields(self):
         result = build_run_microvm_params(
             "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image",
             "arn:aws:iam::123456789012:role/MyRole",
-            max_idle_seconds=600, suspended_duration_seconds=1800, auto_resume=False
+            max_idle_seconds=600,
+            suspended_duration_seconds=1800,
+            auto_resume=False,
         )
         policy = result["idlePolicy"]
         assert policy["maxIdleDurationSeconds"] == 600
@@ -28,7 +33,7 @@ class TestBuildRunMicrovmParams:
         """All three idle policy fields must always be present together."""
         result = build_run_microvm_params(
             "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image",
-            "arn:aws:iam::123456789012:role/MyRole"
+            "arn:aws:iam::123456789012:role/MyRole",
         )
         policy = result["idlePolicy"]
         assert "maxIdleDurationSeconds" in policy
@@ -40,7 +45,7 @@ class TestBuildRunMicrovmParams:
             build_run_microvm_params(
                 "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image",
                 "arn:aws:iam::123456789012:role/MyRole",
-                max_idle_seconds=0
+                max_idle_seconds=0,
             )
 
     def test_invalid_max_idle_seconds_too_high(self):
@@ -48,7 +53,7 @@ class TestBuildRunMicrovmParams:
             build_run_microvm_params(
                 "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image",
                 "arn:aws:iam::123456789012:role/MyRole",
-                max_idle_seconds=30000
+                max_idle_seconds=30000,
             )
 
     def test_invalid_suspended_duration_zero(self):
@@ -56,7 +61,7 @@ class TestBuildRunMicrovmParams:
             build_run_microvm_params(
                 "arn:aws:lambda:us-east-1:123456789012:microvm-image:my-image",
                 "arn:aws:iam::123456789012:role/MyRole",
-                suspended_duration_seconds=0
+                suspended_duration_seconds=0,
             )
 
 
@@ -76,8 +81,7 @@ class TestBuildAuthTokenParams:
 
     def test_port_range(self):
         result = build_auth_token_params(
-            "microvm-abc123",
-            allowed_ports=[{"range": {"start": 8000, "end": 9000}}]
+            "microvm-abc123", allowed_ports=[{"range": {"start": 8000, "end": 9000}}]
         )
         assert result["allowedPorts"] == [{"range": {"start": 8000, "end": 9000}}]
 
@@ -85,16 +89,12 @@ class TestBuildAuthTokenParams:
         """Each port spec is a tagged union - only one key allowed."""
         with pytest.raises(ValueError):
             build_auth_token_params(
-                "microvm-abc123",
-                allowed_ports=[{"port": 5000, "allPorts": True}]
+                "microvm-abc123", allowed_ports=[{"port": 5000, "allPorts": True}]
             )
 
     def test_invalid_port_spec_unknown_key(self):
         with pytest.raises(ValueError):
-            build_auth_token_params(
-                "microvm-abc123",
-                allowed_ports=[{"protocol": "HTTP"}]
-            )
+            build_auth_token_params("microvm-abc123", allowed_ports=[{"protocol": "HTTP"}])
 
     def test_invalid_expiration_too_high(self):
         with pytest.raises(ValueError):

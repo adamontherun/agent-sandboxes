@@ -1,7 +1,6 @@
 """Tests for Chapter 8 challenge: package management and dependency resolution."""
 
-import pytest
-from ch08 import resolve_dependencies, parse_requirements, DependencyPlan
+from ch08 import DependencyPlan, parse_requirements, resolve_dependencies
 
 
 class TestParseRequirements:

@@ -92,8 +92,10 @@ class BlueGreenOrchestrator:
             raise ValueError("no candidate staged")
 
         if not check_health(instance):
-            print(f"Candidate {self.green_version} failed health check "
-                  f"(state={instance.get('state')}); aborting cutover, staying on {self.live_version}")
+            print(
+                f"Candidate {self.green_version} failed health check "
+                f"(state={instance.get('state')}); aborting cutover, staying on {self.live_version}"
+            )
             return False
 
         print(f"Candidate {self.green_version} healthy - cutting traffic over")
@@ -103,7 +105,9 @@ class BlueGreenOrchestrator:
         return True
 
 
-def decide_scaling_action(running_count: int, queued_requests: int, max_per_microvm: int = 5) -> str:
+def decide_scaling_action(
+    running_count: int, queued_requests: int, max_per_microvm: int = 5
+) -> str:
     """A minimal scale-out heuristic: launch another MicroVM once the
     queue backlog per running instance exceeds max_per_microvm. This mirrors
     Chapter 13's framing that ListMicrovms/GetMicrovm state, not a dedicated
@@ -136,7 +140,11 @@ if __name__ == "__main__":
     print("=== Blue/green cutover: unhealthy candidate stays on blue ===\n")
     orchestrator2 = BlueGreenOrchestrator(blue_version="13.0")
     orchestrator2.stage_candidate("14.1")
-    unhealthy_instance = {"microvmId": "microvm-14.1-1", "state": "TERMINATED", "imageVersion": "14.1"}
+    unhealthy_instance = {
+        "microvmId": "microvm-14.1-1",
+        "state": "TERMINATED",
+        "imageVersion": "14.1",
+    }
     cut2 = orchestrator2.cut_over(unhealthy_instance)
     print(f"  -> cutover happened={cut2}, live_version={orchestrator2.live_version}\n")
 

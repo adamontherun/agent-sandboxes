@@ -7,14 +7,13 @@ request-level tracing with timing.
 """
 
 import json
-import time
-import uuid
 from dataclasses import dataclass, field
 
 
 @dataclass
 class LogEntry:
     """A single structured log entry."""
+
     timestamp: str
     event: str
     request_id: str

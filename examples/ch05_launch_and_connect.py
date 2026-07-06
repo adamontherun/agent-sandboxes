@@ -10,17 +10,18 @@ This script demonstrates:
 Real output captured from a live run (account ID and token redacted):
 
     $ aws lambda-microvms run-microvm \
-        --image-identifier arn:aws:lambda:us-east-1:<your-account-id>:microvm-image:lambda-microvms-poc-hello-world \
-        --execution-role-arn arn:aws:iam::<your-account-id>:role/MicroVMLambdaPOCRole \
-        --idle-policy '{"maxIdleDurationSeconds":300,"suspendedDurationSeconds":300,"autoResumeEnabled":true}'
+        --image-identifier arn:aws:lambda:us-east-1:<acct-id>:microvm-image:hello-world \
+        --execution-role-arn arn:aws:iam::<acct-id>:role/MicroVMLambdaPOCRole \
+        --idle-policy \
+          '{"maxIdleDurationSeconds":300,"suspendedDurationSeconds":300,"autoResumeEnabled":true}'
 
     {
         "microvmId": "microvm-29fabacb-68fe-30ed-b477-39bf36e55b16",
         "state": "PENDING",
         "endpoint": "<random-id>.lambda-microvm.us-east-1.on.aws",
-        "imageArn": "arn:aws:lambda:us-east-1:<your-account-id>:microvm-image:lambda-microvms-poc-hello-world",
+        "imageArn": "arn:aws:lambda:us-east-1:<acct-id>:microvm-image:hello-world",
         "imageVersion": "11.0",
-        "executionRoleArn": "arn:aws:iam::<your-account-id>:role/MicroVMLambdaPOCRole",
+        "executionRoleArn": "arn:aws:iam::<acct-id>:role/MicroVMLambdaPOCRole",
         "idlePolicy": {
             "maxIdleDurationSeconds": 300,
             "suspendedDurationSeconds": 300,
@@ -40,11 +41,11 @@ GetMicrovm showed state=RUNNING within 5 seconds of the RunMicrovm call.
 """
 
 import json
-import time
+import ssl
 import subprocess
 import sys
+import time
 import urllib.request
-import ssl
 
 
 def run_aws(*args):
@@ -62,18 +63,23 @@ def launch_microvm(image_arn: str, execution_role_arn: str):
 
     # All three idle policy fields are required together.
     # Omitting any one produces a validation error.
-    idle_policy = json.dumps({
-        "maxIdleDurationSeconds": 300,
-        "suspendedDurationSeconds": 300,
-        "autoResumeEnabled": True,
-    })
+    idle_policy = json.dumps(
+        {
+            "maxIdleDurationSeconds": 300,
+            "suspendedDurationSeconds": 300,
+            "autoResumeEnabled": True,
+        }
+    )
 
     print("Launching MicroVM...")
     response = run_aws(
         "run-microvm",
-        "--image-identifier", image_arn,
-        "--execution-role-arn", execution_role_arn,
-        "--idle-policy", idle_policy,
+        "--image-identifier",
+        image_arn,
+        "--execution-role-arn",
+        execution_role_arn,
+        "--idle-policy",
+        idle_policy,
     )
 
     microvm_id = response["microvmId"]
@@ -109,14 +115,17 @@ def create_auth_token(microvm_id: str, port: int = 5000):
     print(f"Creating auth token for port {port}...")
     response = run_aws(
         "create-microvm-auth-token",
-        "--microvm-identifier", microvm_id,
-        "--expiration-in-minutes", "15",
-        "--allowed-ports", allowed_ports,
+        "--microvm-identifier",
+        microvm_id,
+        "--expiration-in-minutes",
+        "15",
+        "--allowed-ports",
+        allowed_ports,
     )
 
     token = response["authToken"]["X-aws-proxy-auth"]
     print(f"  Token (first 40 chars): {token[:40]}...")
-    print(f"  Token type: JWE (5 base64url segments)")
+    print("  Token type: JWE (5 base64url segments)")
     return token
 
 
@@ -148,10 +157,13 @@ def cleanup(microvm_id: str):
 
 
 if __name__ == "__main__":
-    IMAGE_ARN = "arn:aws:lambda:us-east-1:<your-account-id>:microvm-image:lambda-microvms-poc-hello-world"
-    ROLE_ARN = "arn:aws:iam::<your-account-id>:role/MicroVMLambdaPOCRole"
+    import sandbox_config
 
-    microvm_id, endpoint = launch_microvm(IMAGE_ARN, ROLE_ARN)
+    # Account-specific values come from your .env / environment — see
+    # .env.example and the README's "Following along with AWS" section.
+    microvm_id, endpoint = launch_microvm(
+        sandbox_config.image_arn(), sandbox_config.execution_role_arn()
+    )
     try:
         token = create_auth_token(microvm_id)
         make_request(endpoint, token)

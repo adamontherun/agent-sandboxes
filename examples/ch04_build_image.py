@@ -43,9 +43,9 @@ triggered in parallel (one per Graviton generation: 3 and 4).
 """
 
 import json
-import time
 import subprocess
 import sys
+import time
 
 
 def run_aws(*args):
@@ -58,8 +58,9 @@ def run_aws(*args):
     return json.loads(result.stdout) if result.stdout.strip() else {}
 
 
-def build_image(name: str, bucket: str, artifact_key: str,
-                build_role_arn: str, base_image_arn: str):
+def build_image(
+    name: str, bucket: str, artifact_key: str, build_role_arn: str, base_image_arn: str
+):
     """Build a new MicroVM image and wait for completion."""
 
     s3_uri = f"s3://{bucket}/{artifact_key}"
@@ -67,10 +68,14 @@ def build_image(name: str, bucket: str, artifact_key: str,
 
     response = run_aws(
         "create-microvm-image",
-        "--name", name,
-        "--base-image-arn", base_image_arn,
-        "--build-role-arn", build_role_arn,
-        "--code-artifact", f"uri={s3_uri}",
+        "--name",
+        name,
+        "--base-image-arn",
+        base_image_arn,
+        "--build-role-arn",
+        build_role_arn,
+        "--code-artifact",
+        f"uri={s3_uri}",
     )
 
     image_arn = response["imageArn"]
@@ -97,23 +102,31 @@ def build_image(name: str, bucket: str, artifact_key: str,
             # Check build details for the failure reason
             builds = run_aws(
                 "list-microvm-image-builds",
-                "--image-identifier", image_arn,
-                "--image-version", version,
+                "--image-identifier",
+                image_arn,
+                "--image-version",
+                version,
             )
             for build in builds.get("items", []):
                 if build["buildState"] == "FAILED":
-                    print(f"  FAILED ({build['chipsetGeneration']}): {build.get('stateReason', 'unknown')}")
+                    print(
+                        f"  FAILED ({build['chipsetGeneration']}): "
+                        f"{build.get('stateReason', 'unknown')}"
+                    )
             sys.exit(1)
 
         time.sleep(15)
 
 
 if __name__ == "__main__":
-    # Replace these with your actual values
+    import sandbox_config
+
+    # Account-specific values come from your .env / environment — see
+    # .env.example and the README's "Following along with AWS" section.
     build_image(
         name="ch04-hello-sandbox",
         bucket="my-bucket",
         artifact_key="ch04-hello-sandbox/artifact.zip",
-        build_role_arn="arn:aws:iam::<your-account-id>:role/service-role/my-build-role",
+        build_role_arn=sandbox_config.build_role_arn(),
         base_image_arn="arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1",
     )

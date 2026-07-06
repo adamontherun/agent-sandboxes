@@ -23,7 +23,7 @@ def parse_requirements(requirements_text: str) -> list[str]:
         line = line.split(";")[0].strip()
         if not line:
             continue
-        match = re.match(r'^([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)', line)
+        match = re.match(r"^([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)", line)
         if match:
             packages.append(match.group(1).lower())
     return packages

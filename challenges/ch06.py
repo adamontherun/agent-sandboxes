@@ -7,8 +7,7 @@ logic a real orchestrator runs to manage cost and availability.
 """
 
 
-def should_suspend(idle_seconds: float, max_idle_duration: int,
-                   current_state: str) -> bool:
+def should_suspend(idle_seconds: float, max_idle_duration: int, current_state: str) -> bool:
     """
     Decide whether a MicroVM should be suspended.
 
@@ -24,8 +23,9 @@ def should_suspend(idle_seconds: float, max_idle_duration: int,
     raise NotImplementedError
 
 
-def should_terminate(suspended_seconds: float, suspended_duration_limit: int,
-                     current_state: str) -> bool:
+def should_terminate(
+    suspended_seconds: float, suspended_duration_limit: int, current_state: str
+) -> bool:
     """
     Decide whether a suspended MicroVM should be terminated.
 
@@ -41,8 +41,9 @@ def should_terminate(suspended_seconds: float, suspended_duration_limit: int,
     raise NotImplementedError
 
 
-def should_auto_resume(current_state: str, has_incoming_request: bool,
-                       auto_resume_enabled: bool) -> bool:
+def should_auto_resume(
+    current_state: str, has_incoming_request: bool, auto_resume_enabled: bool
+) -> bool:
     """
     Decide whether a suspended MicroVM should be auto-resumed.
 
@@ -57,10 +58,13 @@ def should_auto_resume(current_state: str, has_incoming_request: bool,
     raise NotImplementedError
 
 
-def compute_lifecycle_action(state: str, idle_seconds: float,
-                             suspended_seconds: float,
-                             has_incoming_request: bool,
-                             policy: dict) -> str:
+def compute_lifecycle_action(
+    state: str,
+    idle_seconds: float,
+    suspended_seconds: float,
+    has_incoming_request: bool,
+    policy: dict,
+) -> str:
     """
     Given the full state of a MicroVM and its idle policy, determine the
     next lifecycle action to take.

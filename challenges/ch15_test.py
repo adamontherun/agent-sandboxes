@@ -12,13 +12,13 @@ class FakeSandbox:
     """
 
     def write_file(self, path, content):
-        return SimpleNamespace(ok=True, output=f"wrote to {path}",
-                                detail={"path": path})
+        return SimpleNamespace(ok=True, output=f"wrote to {path}", detail={"path": path})
 
     def read_file(self, path):
         if path == "missing.py":
-            return SimpleNamespace(ok=False, output="no such file: missing.py",
-                                    detail={"path": path})
+            return SimpleNamespace(
+                ok=False, output="no such file: missing.py", detail={"path": path}
+            )
         return SimpleNamespace(ok=True, output="print('hi')\n", detail={"path": path})
 
     def run_command(self, command, timeout=10.0):

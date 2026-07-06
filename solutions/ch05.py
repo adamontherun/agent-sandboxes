@@ -2,17 +2,22 @@
 Solution: Construct and Parse Lambda MicroVM Lifecycle Requests
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
-def build_run_microvm_params(image_arn: str, execution_role_arn: str,
-                             max_idle_seconds: int = 300,
-                             suspended_duration_seconds: int = 300,
-                             auto_resume: bool = True) -> dict:
+def build_run_microvm_params(
+    image_arn: str,
+    execution_role_arn: str,
+    max_idle_seconds: int = 300,
+    suspended_duration_seconds: int = 300,
+    auto_resume: bool = True,
+) -> dict:
     if not 1 <= max_idle_seconds <= 28800:
         raise ValueError(f"max_idle_seconds must be 1-28800, got {max_idle_seconds}")
     if not 1 <= suspended_duration_seconds <= 28800:
-        raise ValueError(f"suspended_duration_seconds must be 1-28800, got {suspended_duration_seconds}")
+        raise ValueError(
+            f"suspended_duration_seconds must be 1-28800, got {suspended_duration_seconds}"
+        )
 
     return {
         "imageIdentifier": image_arn,
@@ -25,8 +30,9 @@ def build_run_microvm_params(image_arn: str, execution_role_arn: str,
     }
 
 
-def build_auth_token_params(microvm_id: str, expiration_minutes: int = 15,
-                            allowed_ports: list | None = None) -> dict:
+def build_auth_token_params(
+    microvm_id: str, expiration_minutes: int = 15, allowed_ports: list | None = None
+) -> dict:
     if not 1 <= expiration_minutes <= 60:
         raise ValueError(f"expiration_minutes must be 1-60, got {expiration_minutes}")
 
@@ -42,7 +48,9 @@ def build_auth_token_params(microvm_id: str, expiration_minutes: int = 15,
             raise ValueError(f"Port spec is a tagged union: exactly one key required, got {keys}")
         key = next(iter(keys))
         if key not in valid_keys:
-            raise ValueError(f"Unknown port spec key '{key}', must be one of: port, range, allPorts")
+            raise ValueError(
+                f"Unknown port spec key '{key}', must be one of: port, range, allPorts"
+            )
 
     return {
         "microvmIdentifier": microvm_id,
@@ -58,7 +66,7 @@ def parse_microvm_status(response: dict) -> dict:
     uptime_seconds = None
     if state == "RUNNING" and "startedAt" in response:
         started = datetime.fromisoformat(response["startedAt"])
-        uptime_seconds = (datetime.now(timezone.utc) - started.astimezone(timezone.utc)).total_seconds()
+        uptime_seconds = (datetime.now(UTC) - started.astimezone(UTC)).total_seconds()
 
     return {
         "id": response["microvmId"],

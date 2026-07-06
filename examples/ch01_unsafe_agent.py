@@ -112,10 +112,10 @@ def analyze_attack(attack: dict) -> None:
     print(f"\n{'=' * 60}")
     print(f"ATTACK: {attack['name']}")
     print(f"{'=' * 60}")
-    print(f"\n[Code snippet — NOT executed]\n")
+    print("\n[Code snippet — NOT executed]\n")
     for line in attack["code"].strip().split("\n"):
         print(f"    {line}")
-    print(f"\n[Risk Analysis]")
+    print("\n[Risk Analysis]")
     for i, risk in enumerate(attack["risks"], 1):
         print(f"  {i}. {risk}")
 

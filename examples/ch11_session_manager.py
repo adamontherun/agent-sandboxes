@@ -107,7 +107,10 @@ class SessionRouter:
         previous_owner = self.shared_pool_owner.get(microvm_id)
         self.client.reset_workspace(microvm_id)
         self.shared_pool_owner[microvm_id] = tenant_id
-        print(f"  [cleanup] {microvm_id} reassigned {previous_owner!r} -> {tenant_id!r}, workspace reset")
+        print(
+            f"  [cleanup] {microvm_id} reassigned {previous_owner!r} -> "
+            f"{tenant_id!r}, workspace reset"
+        )
         return TenantSession(tenant_id=tenant_id, microvm_id=microvm_id, dedicated=False)
 
     def evict_dedicated(self, tenant_id: str) -> None:
@@ -124,7 +127,10 @@ def main() -> None:
     for tenant in ["enterprise-acme", "enterprise-globex"]:
         s1 = router.route(tenant, dedicated=True)
         s2 = router.route(tenant, dedicated=True)
-        print(f"  {tenant}: first={s1.microvm_id} second={s2.microvm_id} (same instance reused: {s1.microvm_id == s2.microvm_id})")
+        print(
+            f"  {tenant}: first={s1.microvm_id} second={s2.microvm_id} "
+            f"(same instance reused: {s1.microvm_id == s2.microvm_id})"
+        )
 
     print("\n== Shared pool: free-tier tenants share a small pool of MicroVMs ==")
     free_tenants = ["free-user-1", "free-user-2", "free-user-3", "free-user-1"]

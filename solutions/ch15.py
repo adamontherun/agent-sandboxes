@@ -29,9 +29,7 @@ class ToolCallRouter:
     def dispatch(self, call: ToolCall) -> dict:
         self.turns_used += 1
         if self.turns_used > self.max_turns:
-            raise TurnBudgetExceeded(
-                f"turn budget of {self.max_turns} exceeded"
-            )
+            raise TurnBudgetExceeded(f"turn budget of {self.max_turns} exceeded")
 
         if call.name == "write_file":
             result = self.sandbox.write_file(**call.arguments)

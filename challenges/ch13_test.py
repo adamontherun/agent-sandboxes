@@ -1,6 +1,7 @@
 """Tests for Chapter 13 challenge: comprehensive logging for sandbox executions."""
 
 import json
+
 import pytest
 from ch13 import ExecutionLogger, LogEntry
 
@@ -91,10 +92,12 @@ class TestHealthCheck:
         assert result["healthy"] is True
 
     def test_terminated_is_unhealthy(self, logger):
-        result = logger.health_check({
-            "state": "TERMINATED",
-            "stateReason": "Success.",
-        })
+        result = logger.health_check(
+            {
+                "state": "TERMINATED",
+                "stateReason": "Success.",
+            }
+        )
         assert result["healthy"] is False
         assert result["action"] == "investigate"
         assert result["stateReason"] == "Success."

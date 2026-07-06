@@ -16,7 +16,7 @@ import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "solutions"))
 
-from ch09 import safe_resolve, cleanup_workspace
+from ch09 import cleanup_workspace, safe_resolve
 
 
 def demo_safe_resolve(root: str) -> None:

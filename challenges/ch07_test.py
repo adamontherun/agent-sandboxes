@@ -1,6 +1,5 @@
 """Tests for Chapter 7 challenge: building a Python code executor."""
 
-import pytest
 from ch07 import ExecutionResult, build_command, is_successful, summarize_result, validate_request
 
 
@@ -49,11 +48,15 @@ class TestSummarizeResult:
 
     def test_failure_case(self):
         result = summarize_result("", "Traceback...\n", 1, False)
-        assert result == ExecutionResult(stdout="", stderr="Traceback...\n", exit_code=1, timed_out=False)
+        assert result == ExecutionResult(
+            stdout="", stderr="Traceback...\n", exit_code=1, timed_out=False
+        )
 
     def test_timeout_case(self):
         result = summarize_result("partial", "[timed out]", None, True)
-        assert result == ExecutionResult(stdout="partial", stderr="[timed out]", exit_code=None, timed_out=True)
+        assert result == ExecutionResult(
+            stdout="partial", stderr="[timed out]", exit_code=None, timed_out=True
+        )
 
 
 class TestIsSuccessful:

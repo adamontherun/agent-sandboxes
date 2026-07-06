@@ -21,7 +21,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e .
+        run: pip install -e . ruff
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
 
       # A challenge suite whose tests pass against the untouched skeleton
       # isn't testing anything, so CI asserts BOTH directions.

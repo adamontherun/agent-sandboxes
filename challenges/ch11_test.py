@@ -1,6 +1,5 @@
 """Tests for Chapter 11 challenge: multi-tenant sandbox routing."""
 
-import pytest
 from ch11 import IsolationRouter, RoutingDecision
 
 

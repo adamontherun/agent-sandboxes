@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 @dataclass
 class ExecutionRequest:
     """A request to execute code with resource requirements."""
+
     code: str
     timeout_seconds: float
     memory_mb: int = 256
@@ -16,6 +17,7 @@ class ExecutionRequest:
 @dataclass
 class ResourcePolicy:
     """Policy defining acceptable resource bounds."""
+
     max_timeout_seconds: float = 30.0
     min_timeout_seconds: float = 1.0
     max_memory_mb: int = 512
@@ -29,6 +31,7 @@ class ResourcePolicy:
 @dataclass
 class PolicyDecision:
     """Result of evaluating an execution request against a policy."""
+
     allowed: bool
     reason: str = ""
     adjusted_timeout: float | None = None
