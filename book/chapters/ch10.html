@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 10 &middot; Resource Limits and Quotas &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Size MicroVMs, defend against runaway workloads with layered limits, and use the 8-hour wall clock without paying for accidents. Chapter 10 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part III &middot; Building the Sandbox.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, resource limits, quotas, cgroups, ulimit, fork bomb">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch10.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 10 &middot; Resource Limits and Quotas &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Size MicroVMs, defend against runaway workloads with layered limits, and use the 8-hour wall clock without paying for accidents.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch10.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 10 &middot; Resource Limits and Quotas">
+<meta name="twitter:description" content="Size MicroVMs, defend against runaway workloads with layered limits, and use the 8-hour wall clock without paying for accidents.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 10,
+  "name": "Resource Limits and Quotas",
+  "description": "Size MicroVMs, defend against runaway workloads with layered limits, and use the 8-hour wall clock without paying for accidents.",
+  "url": "{{PAGES_URL}}chapters/ch10.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch09.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch11.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Networking and Egress Control</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Storage and State</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>Executing Untrusted Code</a></li>
+        <li><a href="ch10.html" class="current"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 10</p>
+        <h1>Resource Limits and Quotas</h1>
+        <p class="subtitle">Size MicroVMs at launch, layer OS-level guards inside them, and treat the 8-hour wall clock as an outer bound rather than your budget.</p>
+      </header>
+
+      <section id="sizing">
+        <h2>Sizing the MicroVM</h2>
+
+        <p>CPU and memory are set when you launch a MicroVM and stay fixed for its lifetime. You cannot resize a running instance; if you need more, you launch a bigger one. The current documented ceilings are <strong>16 vCPUs</strong> and <strong>32 GB of memory</strong> per MicroVM, with the smallest useful configurations starting at a fraction of a vCPU and 128 MB.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Launch with explicit sizing</figcaption>
+          <pre><code class="language-bash">aws lambda-microvms create-microvm \
+  --image-arn arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:coding-agent \
+  --execution-role-arn arn:aws:iam::&lt;your-account-id&gt;:role/MicroVMLambdaPOCRole \
+  --vcpu-count 4 \
+  --memory-size-mb 8192 \
+  --maximum-duration-in-seconds 3600</code></pre>
+        </figure>
+
+        <p>Pick the smallest size that fits your workload's steady state. Agents running Python and shelling out to <code>gcc</code> or <code>node</code> spend most of their time waiting on I/O, so 2 vCPUs and 2&ndash;4 GB is often plenty. Machine-learning inference or heavy compilation is where the upper end starts to matter.</p>
+
+        <p>Full parameter definitions live in the <a href="https://docs.aws.amazon.com/lambda/latest/api/API_CreateMicrovm.html" target="_blank" rel="noopener">CreateMicrovm API reference</a>.</p>
+      </section>
+
+      <section id="max-duration">
+        <h2>The 8-hour Wall Clock</h2>
+
+        <p>Every MicroVM has a hard maximum lifetime. The parameter <code>maximumDurationInSeconds</code> accepts values up to <strong>28800</strong> (8 hours), and 28800 is also the default when unspecified. Once that ceiling is reached, the MicroVM is terminated by the platform regardless of what it is doing.</p>
+
+        <p>The clock starts at <code>startedAt</code> and does not pause during suspension. A MicroVM that was suspended for 7 of its 8 hours still gets terminated at the 8-hour mark. For long-lived environments, plan a session-rotation strategy: snapshot state to durable storage, launch a fresh MicroVM, and rehydrate.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888;&#65039; Gotcha</span>
+          <p>Do not treat <code>maximumDurationInSeconds</code> as your per-request timeout. It is the ceiling for the entire session. A single runaway task can happily consume the full 8 hours of billed compute if that is your only guard. Always add a shorter per-request timeout at the orchestrator level.</p>
+        </aside>
+      </section>
+
+      <section id="defense-in-depth">
+        <h2>Defense in Depth Inside the Guest</h2>
+
+        <p>The MicroVM boundary is enforced by Firecracker and is the primary line of defense. But it is coarse: it caps the whole VM. When a single MicroVM handles many small requests, or when you want to fail a specific runaway task without killing the session, you also need limits <em>inside</em> the guest.</p>
+
+        <p>Two complementary tools:</p>
+
+        <ul>
+          <li><strong>Shell <code>ulimit</code></strong> for setting limits on child processes launched by the agent. Useful for capping CPU time, file size, and process count for a subshell that runs untrusted code.</li>
+          <li><strong>Python <code>resource.setrlimit</code></strong> for programmatic control from the runtime that supervises those child processes.</li>
+        </ul>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Per-task limits in Python</figcaption>
+          <pre><code class="language-python">import resource
+import subprocess
+
+def run_task(cmd: list[str], cpu_seconds: int, memory_bytes: int):
+    def apply_limits():
+        # Wall-clock and CPU-time cap
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
+        # Address-space cap (blocks memory bombs)
+        resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+        # Process count cap (blocks fork bombs)
+        resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
+        # Max file size the child can create
+        resource.setrlimit(resource.RLIMIT_FSIZE, (100 * 1024 * 1024, 100 * 1024 * 1024))
+
+    return subprocess.run(cmd, preexec_fn=apply_limits, timeout=cpu_seconds + 5)</code></pre>
+        </figure>
+
+        <p>A classic fork bomb, <code>:(){ :|:& };:</code>, exhausts process table slots by forking recursively. Without <code>RLIMIT_NPROC</code>, it can starve the guest even though the VM boundary would eventually catch it via memory exhaustion. With <code>RLIMIT_NPROC=32</code>, the 33rd fork fails and the parent shell keeps running.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>Firecracker uses Linux cgroups (via its <a href="https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md" target="_blank" rel="noopener">jailer</a>) to enforce hard memory and CPU limits at the VM boundary. Your Python <code>setrlimit</code> and shell <code>ulimit</code> calls operate on the process boundary <em>inside</em> that VM. Cgroups are the safety net; rlimits are the fast, precise guard for individual tasks. You want both.</p>
+        </aside>
+      </section>
+
+      <section id="request-timeouts">
+        <h2>Per-Request Timeouts</h2>
+
+        <p>Every request into the sandbox needs its own timeout, independent of the MicroVM's max duration. A reasonable layering:</p>
+
+        <ol>
+          <li><strong>Client timeout</strong> (seconds to a few minutes). Set on the HTTP client that calls into the MicroVM. Bounds how long an upstream caller waits.</li>
+          <li><strong>Server-side task timeout</strong>. Enforced inside the guest by the agent runtime, using <code>signal.alarm</code>, <code>asyncio.wait_for</code>, or a subprocess <code>timeout=</code>.</li>
+          <li><strong>MicroVM idle policy</strong> (Chapter 6). Reclaims the whole VM after a longer idle period.</li>
+          <li><strong>Max duration</strong> (8 hours). The absolute ceiling.</li>
+        </ol>
+
+        <p>Each layer is redundant on purpose. If the agent hangs but the socket stays open, the client timeout fires. If the client hangs on to a broken connection, the task timeout fires. If both fail, the idle policy eventually reclaims the VM. If all three fail, the 8-hour ceiling catches it. You do not want to rely on any single layer.</p>
+      </section>
+
+      <section id="monitoring">
+        <h2>Monitoring What You Configured</h2>
+
+        <p>Configured limits are only useful if you can see when they bite. A minimal monitoring surface:</p>
+
+        <ul>
+          <li>Log every <code>PolicyDecision</code> your orchestrator makes: which requests were denied, which were clamped, which sailed through.</li>
+          <li>Emit CloudWatch metrics keyed by rejection reason: <code>PolicyDenied{reason="blocked_pattern"}</code>, <code>PolicyClamped{field="timeout"}</code>. Deny-rate spikes almost always precede either abuse or a legitimate user hitting a limit that is now too tight.</li>
+          <li>On the guest side, capture exit codes and signals. A subprocess killed by <code>SIGKILL</code> with <code>RLIMIT_CPU</code> exceeded, or <code>MemoryError</code> from <code>RLIMIT_AS</code>, are distinct signals worth counting.</li>
+        </ul>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Alert on the <em>ratio</em> of clamped-to-total requests, not the absolute count. A sudden climb from 2% clamped to 40% clamped usually means either policy drift (limits set too tight for real traffic) or a caller sending malformed requests. Both are worth a page.</p>
+        </aside>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: A Policy Evaluator for Incoming Requests</h2>
+
+        <p>Your challenge is to implement the front-door check that every request goes through before an orchestrator hands it to a MicroVM. It is the piece that decides whether a request is safe, whether its resource asks are within bounds, and whether to clamp them silently or reject the request outright.</p>
+
+        <p>Open <code>challenges/ch10.py</code> and implement <code>evaluate_request(request, policy)</code>. It receives an <code>ExecutionRequest</code> (code, timeout, memory) and a <code>ResourcePolicy</code>, and returns a <code>PolicyDecision</code>:</p>
+
+        <ul>
+          <li>Deny (with a reason) if the code contains any pattern from <code>policy.blocked_patterns</code>.</li>
+          <li>Deny if the code's UTF-8 byte size exceeds <code>policy.max_code_size_bytes</code>.</li>
+          <li>Clamp timeout and memory to the policy's bounds; report clamps via <code>adjusted_timeout</code> / <code>adjusted_memory</code>. Clamping does not deny.</li>
+          <li>Otherwise, allow.</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges &amp;&amp; python3 -m pytest ch10_test.py -v</code></pre>
+
+        <p>Eleven tests cover the allow path, both deny paths, all four clamp directions, custom pattern lists, and the shape of the return value. See <code>solutions/ch10.py</code> when you are ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>Run <code>examples/ch10_resource_limits.py</code> to see the reference solution evaluate a range of requests &mdash; normal, fork-bomb, oversized, and out-of-bounds &mdash; with no AWS calls required.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch09.html">Chapter 9: Executing Untrusted Code</a>
+        <a class="next" href="ch11.html">Chapter 11: Observability and Debugging</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 8 &middot; Package Management and Dependencies &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Bake vs. install: choose where dependencies live in your MicroVM image. Chapter 8 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part III &middot; Building the Sandbox.">
+<meta name="keywords" content="agent sandbox, microvm, dependencies, pip, package management, INTERNET_EGRESS">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch08.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 8 &middot; Package Management and Dependencies">
+<meta property="og:description" content="Bake vs. install: choose where dependencies live in your MicroVM image.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch08.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 8 &middot; Package Management and Dependencies">
+<meta name="twitter:description" content="Bake vs. install: choose where dependencies live in your MicroVM image.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 8,
+  "name": "Package Management and Dependencies",
+  "description": "Bake vs. install: choose where dependencies live in your MicroVM image.",
+  "url": "{{PAGES_URL}}chapters/ch08.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch07.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch09.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Designing the Sandbox Runtime</a></li>
+        <li><a href="ch08.html" class="current"><span class="ch-num">8</span>Package Management and Dependencies</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>Filesystem and Persistence</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Networking the Sandbox</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 8</p>
+        <h1>Package Management and Dependencies</h1>
+        <p class="subtitle">Bake it now or install it later &mdash; and why the answer changes what your sandbox can do.</p>
+      </header>
+
+      <section id="intro">
+        <h2>Two places dependencies can live</h2>
+
+        <p>Every package your agent uses has to arrive somewhere. In a MicroVM sandbox, "somewhere" is one of two places: burned into the image at build time, or fetched by <code>pip install</code> from inside a running MicroVM. Both work. They fail differently, cost differently, and constrain your agent differently.</p>
+
+        <p>This chapter is about picking the right place for each dependency. The mechanics are simple. The judgment is where the money is.</p>
+      </section>
+
+      <section id="bake-vs-install">
+        <h2>Bake vs. install</h2>
+
+        <p><strong>Baking</strong> means the package is installed in the Dockerfile that produces your MicroVM image. It is present in the snapshot. Every MicroVM launched from that image starts with the package already imported and ready. The tradeoff: rebuilding the image takes minutes, and every extra megabyte lives in the snapshot forever.</p>
+
+        <p><strong>Installing at runtime</strong> means the MicroVM starts clean and your agent (or your bootstrap script) runs <code>pip install some-package</code> after the VM is live. The tradeoff: you pay the install cost on every fresh MicroVM, and you need network egress to reach PyPI.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Dockerfile &mdash; baked dependencies</figcaption>
+          <pre><code class="language-dockerfile">FROM public.ecr.aws/lambda/microvms:al2023-minimal
+RUN dnf install -y python3 python3-pip && dnf clean all
+RUN pip3 install flask requests boto3 numpy pandas
+COPY agent.py /app/agent.py
+WORKDIR /app
+CMD ["python3", "agent.py"]</code></pre>
+        </figure>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Runtime install &mdash; from inside a live MicroVM</figcaption>
+          <pre><code class="language-bash">pip install --user pandas scikit-learn</code></pre>
+        </figure>
+      </section>
+
+      <section id="persistence">
+        <h2>Persistence changes the math</h2>
+
+        <p>Here is what makes Lambda MicroVMs different from a normal container: <em>state persists across suspend and resume</em>. When you call <code>SuspendMicrovm</code>, the running memory and disk are snapshotted. When you later call <code>ResumeMicrovm</code>, that exact state comes back. A package you installed at runtime is still there.</p>
+
+        <p>So the pattern is: install once, use many times. A long-lived sandbox that you keep suspending and resuming behaves more like a bakery than a fresh cluster &mdash; the packages you installed on Monday are still available on Friday.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888; Gotcha</span>
+          <p>Suspend and resume preserve the packages. <em>Termination</em> does not. If a MicroVM is terminated (out of TTL, out of memory, or by explicit <code>DeleteMicrovm</code>), everything you installed at runtime is gone. The next launch from the same image starts clean. Do not assume runtime installs are durable across the MicroVM's lifetime unless you understand who controls termination.</p>
+        </aside>
+      </section>
+
+      <section id="caching">
+        <h2>Caching strategies</h2>
+
+        <p>If you install at runtime, cache the wheels. A pip cache lives at <code>~/.cache/pip</code> and is preserved by suspend/resume just like the packages themselves. On a warm resume, <code>pip install pandas</code> pulls from the local cache in under a second instead of downloading from PyPI.</p>
+
+        <p>Three strategies, from cheapest cold start to most flexible:</p>
+
+        <ul>
+          <li><strong>Bake everything.</strong> No network dependency, no install latency. Best for stable dependency sets that change on a build cycle.</li>
+          <li><strong>Bake the base, install the tail.</strong> Common packages (Flask, boto3, requests) in the image; rare or agent-specific packages installed at runtime. This is the pattern most production sandboxes converge on.</li>
+          <li><strong>Install everything, cache aggressively.</strong> Fresh image on each launch, but a warm pip cache on suspend/resume. Best when the dependency set is genuinely unpredictable, e.g. an agent that installs whatever the user asks it to.</li>
+        </ul>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Baking the ~20 most common packages into the image cuts perceived latency on fresh MicroVMs from tens of seconds to sub-second. The rule of thumb: any package you import on more than half of agent runs belongs in the image. Reserve runtime install for the long tail.</p>
+        </aside>
+      </section>
+
+      <section id="network-access">
+        <h2>Network access for PyPI</h2>
+
+        <p>Runtime <code>pip install</code> needs to reach <code>pypi.org</code>. Lambda MicroVMs are network-isolated by default; you attach network access through egress connectors on the image. The managed <a href="https://docs.aws.amazon.com/lambda/latest/microvm-api/" target="_blank" rel="noopener">INTERNET_EGRESS network connector</a> gives outbound HTTPS to arbitrary internet hosts.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">CreateMicrovmImage &mdash; with internet egress</figcaption>
+          <pre><code class="language-bash">aws lambda-microvms create-microvm-image \
+  --name my-agent-sandbox \
+  --base-image-arn arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1 \
+  --build-role-arn arn:aws:iam::&lt;acct&gt;:role/service-role/build-role \
+  --code-artifact uri=s3://my-bucket/agent/artifact.zip \
+  --egress-network-connectors \
+    arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:INTERNET_EGRESS</code></pre>
+        </figure>
+
+        <p>If you bake all dependencies and never install at runtime, you can omit the internet egress connector entirely. That is a real security posture upgrade &mdash; an agent that cannot reach PyPI also cannot exfiltrate data to an attacker-controlled host. Keep egress off unless you need it.</p>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Plan the install list</h2>
+
+        <p>Your challenge is to implement the logic that decides which packages a running MicroVM needs to install. Given a list of requested packages and the set already baked into the image, produce a plan: what is available, what needs installing, and the exact <code>pip install</code> command to run.</p>
+
+        <p>Open <code>challenges/ch08.py</code> and implement:</p>
+
+        <ul>
+          <li><code>parse_requirements(requirements_text)</code> &mdash; parse a <code>requirements.txt</code>-format string, handling comments, blanks, version specifiers, extras, and environment markers. Returns lowercased package names.</li>
+          <li><code>resolve_dependencies(requested, baked)</code> &mdash; return a <code>DependencyPlan</code> splitting packages into <code>already_available</code>, <code>needs_install</code>, and an <code>install_command</code> string.</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges && python3 -m pytest ch08_test.py -v</code></pre>
+
+        <p>The suite has 15 cases covering parsing edge cases and the resolver. Compare with <code>solutions/ch08.py</code> when you are ready.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>The runnable example at <code>examples/ch08_package_management.py</code> feeds a realistic <code>requirements.txt</code> through the resolver and prints the install command that a bootstrap script would run inside a fresh MicroVM. No AWS calls; run it locally.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch07.html">Chapter 7: Designing the Sandbox Runtime</a>
+        <a class="next" href="ch09.html">Chapter 9: Filesystem and Persistence</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>
