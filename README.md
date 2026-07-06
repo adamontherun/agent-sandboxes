@@ -30,20 +30,60 @@ pip install -e .
 aws configure
 ```
 
-**Note**: Lambda MicroVMs is a preview feature. Many examples ship an offline simulation path, so you can follow along without an AWS account. Only the examples in Chapters 4–6 make real AWS calls.
+**Note**: Most examples ship an offline simulation path, so you can follow along without an AWS account. Only the examples in Chapters 4–6 make real AWS calls.
 
 ## Following along with AWS
 
-To run the Chapter 4–6 examples against your own account, you don't need to edit any code — set your values once in a `.env` file:
+The Chapter 4–6 examples run against real AWS Lambda MicroVMs. You don't edit any code — you set your values once in a `.env` file and run the scripts. Here's the whole path, start to finish.
+
+### 1. Install prerequisites
+
+- **Update the AWS CLI to a recent v2.** Lambda MicroVMs commands (`aws lambda-microvms ...`) only exist in newer releases. Check with `aws lambda-microvms help` — if it errors, run `brew upgrade awscli` (or reinstall from [aws.amazon.com/cli](https://aws.amazon.com/cli/)).
+- **Configure credentials.** Either run `aws configure --profile microvms` (or `aws configure sso ...` if your org uses IAM Identity Center), then confirm it works:
+  ```sh
+  aws sts get-caller-identity --profile microvms
+  ```
+
+### 2. Create the two AWS prerequisites (one time)
+
+Building a MicroVM image needs an S3 bucket and an IAM build role. Follow the [AWS getting-started guide](https://docs.aws.amazon.com/lambda/latest/dg/microvms-getting-started.html) — you need:
+
+- An **S3 bucket** in your region for the code artifact.
+- An **IAM build role** that Lambda can assume (trust policy for `lambda.amazonaws.com`; permissions for `s3:GetObject` on your bucket and `logs:*` for build logs).
+
+### 3. Point the course at your account
 
 ```sh
 cp .env.example .env
-# then open .env and fill in your account ID, region, image ARN, and role ARNs
 ```
 
-The examples load `.env` automatically. Anything already set in your shell environment (or CI) takes precedence over the file, and `.env` is git-ignored so your values never get committed.
+Open `.env` and fill in the values (see [`.env.example`](.env.example) for the full annotated list):
 
-For credentials, either run `aws configure` (the examples shell out to the AWS CLI and use your configured profile) or put `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` directly in the same `.env`. See [`.env.example`](.env.example) for the full list of settings.
+| Setting | What it is |
+| --- | --- |
+| `AWS_PROFILE` | The CLI profile to use (e.g. `microvms`) |
+| `AWS_REGION` / `AWS_ACCOUNT_ID` | Your region and 12-digit account ID |
+| `MICROVM_BUILD_ROLE_ARN` | The build role from step 2 |
+| `MICROVM_EXECUTION_ROLE_ARN` | The IAM role a MicroVM assumes at runtime |
+| `MICROVM_IMAGE_ARN` | An image you've built (fill this in after step 4) |
+| `MICROVM_INGRESS_PORT` / `MICROVM_REQUEST_PATH` | The port your app listens on (default `8080`) and a route to hit (default `/`) |
+
+The examples load `.env` automatically. Anything already set in your shell environment takes precedence, and `.env` is git-ignored so your values never get committed. (You can also skip `AWS_PROFILE` and put `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` straight in `.env`.)
+
+### 4. Build an image, then launch a MicroVM
+
+```sh
+# Build a MicroVM image (uses MICROVM_BUILD_ROLE_ARN). Copy the returned
+# image ARN into MICROVM_IMAGE_ARN in your .env.
+python examples/ch04_build_image.py
+
+# Launch it, mint an auth token, make an authenticated request, and tear it down.
+python examples/ch05_launch_and_connect.py
+```
+
+A successful run ends with `Status: 200` and your app's response, then `Terminated.` If you get a **403**, your `MICROVM_INGRESS_PORT` doesn't match the port your app listens on; a **404** means the port is right but `MICROVM_REQUEST_PATH` isn't a route your app serves.
+
+> **Cost:** a running MicroVM bills at a baseline rate. The examples terminate what they launch, but if a run exits early, check for stragglers with `aws lambda-microvms list-microvms --profile <you>` and terminate any that aren't `TERMINATED`.
 
 ## Doing challenges
 

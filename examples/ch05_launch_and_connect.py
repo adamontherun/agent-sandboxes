@@ -45,6 +45,7 @@ import ssl
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 
@@ -105,7 +106,7 @@ def launch_microvm(image_arn: str, execution_role_arn: str):
     return microvm_id, endpoint
 
 
-def create_auth_token(microvm_id: str, port: int = 5000):
+def create_auth_token(microvm_id: str, port: int = 8080):
     """Create an auth token for a specific port."""
 
     # allowedPorts is a tagged union: each entry has exactly ONE of
@@ -138,15 +139,29 @@ def make_request(endpoint: str, token: str, path: str = "/"):
     req = urllib.request.Request(url)
     req.add_header("X-aws-proxy-auth", token)
 
+    ctx = ssl.create_default_context()
     try:
-        ctx = ssl.create_default_context()
         resp = urllib.request.urlopen(req, timeout=10, context=ctx)
-        body = resp.read().decode()
         print(f"  Status: {resp.status}")
-        print(f"  Body:   {body}")
-    except Exception as e:
-        print(f"  Request failed: {e}")
-        print("  (This is expected if running from a network-restricted environment)")
+        print(f"  Body:   {resp.read().decode()}")
+    except urllib.error.HTTPError as e:
+        # The request reached AWS and got an HTTP response — not a network
+        # problem. The status tells you what actually happened.
+        print(f"  Status: {e.code} {e.reason}")
+        if e.code == 403:
+            print(
+                "  403 means the proxy rejected the request. Most often the "
+                "auth token's port doesn't match the port your app listens on "
+                "— set MICROVM_INGRESS_PORT to your app's port."
+            )
+        elif e.code == 404:
+            print(
+                f"  404 means you reached the app but {path!r} isn't a route it "
+                "serves — set MICROVM_REQUEST_PATH to a valid path (e.g. /health)."
+            )
+    except urllib.error.URLError as e:
+        # This is the genuinely network-level failure case.
+        print(f"  Could not reach the endpoint (network/TLS issue): {e.reason}")
 
 
 def cleanup(microvm_id: str):
@@ -165,7 +180,7 @@ if __name__ == "__main__":
         sandbox_config.image_arn(), sandbox_config.execution_role_arn()
     )
     try:
-        token = create_auth_token(microvm_id)
-        make_request(endpoint, token)
+        token = create_auth_token(microvm_id, port=sandbox_config.INGRESS_PORT)
+        make_request(endpoint, token, path=sandbox_config.REQUEST_PATH)
     finally:
         cleanup(microvm_id)

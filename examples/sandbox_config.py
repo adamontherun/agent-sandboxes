@@ -48,6 +48,15 @@ _load_dotenv()
 REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
 ACCOUNT_ID = os.environ.get("AWS_ACCOUNT_ID", "123456789012")
 
+# The port your application listens on inside the MicroVM. The HTTP_INGRESS
+# connector routes to 8080 by default, which is what the AWS getting-started
+# sample and this course's image both use. Change it if your image differs.
+INGRESS_PORT = int(os.environ.get("MICROVM_INGRESS_PORT", "8080"))
+
+# The path to request when checking connectivity. "/" suits the AWS sample
+# app; set MICROVM_REQUEST_PATH to your app's route (e.g. /health) if needed.
+REQUEST_PATH = os.environ.get("MICROVM_REQUEST_PATH", "/")
+
 
 def _require(env_name: str) -> str:
     """Return the value of ``env_name`` or exit with setup instructions."""

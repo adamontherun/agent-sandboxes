@@ -58,8 +58,8 @@ def main():
     separator()
     step(1, "Create a MicroVM image from Dockerfile + code artifact")
     show_command(
-        "aws lambda create-microvm-image \\\n"
-        "    --image-name agent-sandbox-v1 \\\n"
+        "aws lambda-microvms create-microvm-image \\\n"
+        "    --image-identifier agent-sandbox-v1 \\\n"
         "    --dockerfile-uri s3://my-bucket/sandbox/Dockerfile \\\n"
         "    --code-uri s3://my-bucket/sandbox/agent-code.tar.gz \\\n"
         "    --base-image arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1"
@@ -79,7 +79,7 @@ def main():
     # Step 2: Image ready
     separator()
     step(2, "Image build completes (snapshot created)")
-    show_command("aws lambda get-microvm-image --image-name agent-sandbox-v1")
+    show_command("aws lambda-microvms get-microvm-image --image-identifier agent-sandbox-v1")
     show_response(
         {
             "ImageArn": IMAGE_ARN,
@@ -98,7 +98,7 @@ def main():
     separator()
     step(3, "Run a MicroVM instance from the image")
     show_command(
-        "aws lambda run-microvm \\\n"
+        "aws lambda-microvms run-microvm \\\n"
         f"    --image-arn {IMAGE_ARN} \\\n"
         "    --vcpus 4 --memory-mb 8192 --disk-gb 16 \\\n"
         '    --idle-policy \'{"maxIdleDurationSeconds":300,"autoResumeEnabled":true}\''
@@ -148,7 +148,7 @@ def main():
     step(5, "MicroVM goes idle, then suspends automatically")
     print("  After 300 seconds with no requests, the idle policy triggers suspension.")
     print()
-    show_command(f"aws lambda get-microvm --microvm-id {MICROVM_ID}")
+    show_command(f"aws lambda-microvms get-microvm --microvm-identifier {MICROVM_ID}")
     show_response(
         {
             "MicrovmId": MICROVM_ID,
@@ -163,7 +163,7 @@ def main():
     # Step 6: Resume
     separator()
     step(6, "Resume the MicroVM (explicit or automatic on next request)")
-    show_command(f"aws lambda resume-microvm --microvm-id {MICROVM_ID}")
+    show_command(f"aws lambda-microvms resume-microvm --microvm-identifier {MICROVM_ID}")
     show_response(
         {
             "MicrovmId": MICROVM_ID,
@@ -179,7 +179,7 @@ def main():
     # Step 7: Refresh auth token
     separator()
     step(7, "Refresh authentication token (tokens are short-lived)")
-    show_command(f"aws lambda create-microvm-auth-token --microvm-id {MICROVM_ID}")
+    show_command(f"aws lambda-microvms create-microvm-auth-token --microvm-identifier {MICROVM_ID}")
     show_response(
         {
             "MicrovmId": MICROVM_ID,
@@ -192,7 +192,7 @@ def main():
     # Step 8: Terminate
     separator()
     step(8, "Terminate the MicroVM when the session is complete")
-    show_command(f"aws lambda terminate-microvm --microvm-id {MICROVM_ID}")
+    show_command(f"aws lambda-microvms terminate-microvm --microvm-identifier {MICROVM_ID}")
     show_response(
         {
             "MicrovmId": MICROVM_ID,
