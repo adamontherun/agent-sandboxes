@@ -32,6 +32,50 @@ aws configure
 
 **Note**: Most examples ship an offline simulation path, so you can follow along without an AWS account. Only the examples in Chapters 4–6 make real AWS calls.
 
+## Running in Codespaces
+
+Every chapter's sidebar has a **"Launch Codespace"** button. The Codespace opens with Python, the dependencies, and the AWS CLI already installed — no local setup.
+
+### Offline exercises — nothing to configure
+
+Every challenge and every offline example (Chapters 1–3 and 7–16) runs the moment the Codespace finishes building. Just open a terminal and run:
+
+```sh
+pytest challenges/ch03_test.py          # a challenge
+python examples/ch02_overhead_comparison.py   # an offline example
+```
+
+### Chapters 4–6 (real AWS) — add your credentials once
+
+These need AWS. The clean way in Codespaces is **encrypted secrets**, injected as environment variables — no `.env` file, no keys typed into the terminal. Step by step:
+
+1. Go to **[github.com/settings/codespaces](https://github.com/settings/codespaces)** → under **"Codespaces secrets"** click **"New secret"**.
+2. Add each of these (one secret at a time), and under **"Repository access"** grant it this repo:
+
+   | Secret name | Value |
+   | --- | --- |
+   | `AWS_ACCESS_KEY_ID` | your access key |
+   | `AWS_SECRET_ACCESS_KEY` | your secret key |
+   | `AWS_REGION` | e.g. `us-east-1` |
+   | `AWS_ACCOUNT_ID` | your 12-digit account ID |
+   | `MICROVM_BUILD_ROLE_ARN` | build role ARN (see below) |
+   | `MICROVM_EXECUTION_ROLE_ARN` | execution role ARN |
+   | `MICROVM_IMAGE_ARN` | an image you've built (fill in after Chapter 4) |
+   | `MICROVM_CODE_ARTIFACT_URI` | `s3://your-bucket/app.zip` |
+
+3. **Start a fresh Codespace** (secrets load at creation time — if one's already open, run **Codespaces: Rebuild Container** from the command palette, or stop and reopen it).
+4. Confirm it worked in the terminal:
+   ```sh
+   aws sts get-caller-identity     # should print your account
+   echo "$MICROVM_IMAGE_ARN"       # should print your image ARN
+   ```
+5. Run the examples — they read the environment variables automatically:
+   ```sh
+   python examples/ch05_launch_and_connect.py
+   ```
+
+That's it. (If you own a fork of this repo, you can instead add the same names under the repo's **Settings → Secrets and variables → Codespaces**.) Secrets only carry your values in — you still need the one-time AWS prerequisites in the next section.
+
 ## Following along with AWS
 
 The Chapter 4–6 examples run against real AWS Lambda MicroVMs. You don't edit any code — you set your values once in a `.env` file and run the scripts. Here's the whole path, start to finish.
@@ -66,6 +110,7 @@ Open `.env` and fill in the values (see [`.env.example`](.env.example) for the f
 | `MICROVM_BUILD_ROLE_ARN` | The build role from step 2 |
 | `MICROVM_EXECUTION_ROLE_ARN` | The IAM role a MicroVM assumes at runtime |
 | `MICROVM_IMAGE_ARN` | An image you've built (fill this in after step 4) |
+| `MICROVM_CODE_ARTIFACT_URI` | S3 URI of the zipped Dockerfile + app that Chapter 4 builds from |
 | `MICROVM_INGRESS_PORT` / `MICROVM_REQUEST_PATH` | The port your app listens on (default `8080`) and a route to hit (default `/`) |
 
 The examples load `.env` automatically. Anything already set in your shell environment takes precedence, and `.env` is git-ignored so your values never get committed. (You can also skip `AWS_PROFILE` and put `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` straight in `.env`.)
