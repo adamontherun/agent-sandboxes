@@ -92,13 +92,13 @@
       <header>
         <p class="chapter-label">Chapter 14</p>
         <h1>Production Patterns</h1>
-        <p class="subtitle">Everything in Part IV so far has been about one MicroVM behaving correctly under load, attack, or scrutiny. This chapter is about a fleet of them behaving correctly over time &mdash; new image versions, more traffic than one instance can serve, launches that fail for reasons that have nothing to do with your code, and sessions that eventually just... end.</p>
+        <p class="subtitle">Everything in Part IV so far has been about one MicroVM behaving correctly under load, attack, or scrutiny. This chapter is about a fleet of them behaving correctly over time: new image versions, more traffic than one instance can serve, launches that fail for reasons that have nothing to do with your code, and sessions that eventually just... end.</p>
       </header>
 
       <section id="image-versioning">
         <h2>Image Versioning and Updates</h2>
 
-        <p>Every <code>CreateMicrovmImage</code> call doesn't overwrite the previous image &mdash; it produces a new, numbered version. Chapter 13's research turned up a real example of this from a live account: the <code>lambda-microvms-poc-hello-world</code> image sits at version 11.0, and <code>ListMicrovmImageBuilds</code> confirmed that a single image version can have more than one build behind it, one per Graviton chipset generation. A production orchestrator has to think in terms of "which version is a given running MicroVM on," not just "which image."</p>
+        <p>Every <code>CreateMicrovmImage</code> call doesn't overwrite the previous image; it produces a new, numbered version. Chapter 13's research turned up a real example of this from a live account: the <code>lambda-microvms-poc-hello-world</code> image sits at version 11.0, and <code>ListMicrovmImageBuilds</code> confirmed that a single image version can have more than one build behind it, one per Graviton chipset generation. A production orchestrator has to think in terms of "which version is a given running MicroVM on," not just "which image."</p>
 
         <p><code>RunMicrovm</code>'s real response (captured live against that same account in Chapter 5's research) includes the field directly:</p>
 
@@ -112,11 +112,11 @@
 }</code></pre>
         </figure>
 
-        <p>Track that field the same way you'd track a container image digest: log it on every launch, and keep a small mapping in your orchestrator's own state (a database row, a config value &mdash; not necessarily anything fancy) of which version is currently considered "live" for new traffic. <code>UpdateMicrovmImage</code> and <code>UpdateMicrovmImageVersion</code> exist for changing an image's configuration after the fact, but neither one silently migrates already-running MicroVMs to a new version &mdash; a running instance keeps the version it launched with until it's terminated and relaunched. That's the property the next section builds on.</p>
+        <p>Track that field the same way you'd track a container image digest: log it on every launch, and keep a small mapping in your orchestrator's own state (a database row, a config value, nothing fancy) of which version is currently considered "live" for new traffic. <code>UpdateMicrovmImage</code> and <code>UpdateMicrovmImageVersion</code> exist for changing an image's configuration after the fact, but neither one silently migrates already-running MicroVMs to a new version. A running instance keeps the version it launched with until it's terminated and relaunched. That's the property the next section builds on.</p>
 
         <aside class="callout gotcha">
           <span class="callout-title">&#9888;&#65039; Gotcha</span>
-          <p><code>ListMicrovmImageBuilds</code> requires <code>--image-version</code> as a required parameter, not just an image identifier &mdash; you can't list every build across every version of an image in one call. If your orchestrator needs a full build history, iterate <code>ListMicrovmImageVersions</code> first, then call <code>ListMicrovmImageBuilds</code> once per version.</p>
+          <p><code>ListMicrovmImageBuilds</code> requires <code>--image-version</code> as a required parameter, not just an image identifier, so you can't list every build across every version of an image in one call. If your orchestrator needs a full build history, iterate <code>ListMicrovmImageVersions</code> first, then call <code>ListMicrovmImageBuilds</code> once per version.</p>
         </aside>
       </section>
 
@@ -125,7 +125,7 @@
 
         <p>Because a running MicroVM never migrates to a new image version on its own, rolling out a new version is naturally a launch-new-then-retire-old operation, not an in-place upgrade. That maps directly onto blue/green deployment: "blue" is whatever image version is currently taking new sessions, "green" is the candidate you just built. The only rule that matters is: never flip live traffic to green until you've launched it and confirmed it's actually healthy.</p>
 
-        <p>"Healthy" here reuses Chapter 13's health-check logic exactly &mdash; a MicroVM in <code>RUNNING</code> or <code>SUSPENDED</code> state is fine to serve traffic; <code>TERMINATED</code> or <code>FAILED</code> means something went wrong during launch and the cutover should abort, leaving blue as the live version. This is the same <code>GetMicrovm</code> state machine Chapter 13 introduced for debugging, now used as a deployment gate instead of a debugging aid.</p>
+        <p>"Healthy" here reuses Chapter 13's health-check logic exactly. A MicroVM in <code>RUNNING</code> or <code>SUSPENDED</code> state is fine to serve traffic; <code>TERMINATED</code> or <code>FAILED</code> means something went wrong during launch and the cutover should abort, leaving blue as the live version. This is the same <code>GetMicrovm</code> state machine Chapter 13 introduced for debugging, now used as a deployment gate instead of a debugging aid.</p>
 
         <figure class="codeblock">
           <figcaption class="code-label">examples/ch14_orchestrator.py &mdash; real output from running this script locally</figcaption>
@@ -159,18 +159,18 @@ Candidate 14.1 failed health check (state=TERMINATED); aborting cutover, staying
 === Done ===</code></pre>
         </figure>
 
-        <p>Notice the second cutover attempt: the candidate's launch itself succeeded well enough to return a state, but that state was <code>TERMINATED</code>, and the orchestrator correctly refuses to move live traffic onto it. That's the entire point of gating on health rather than on "did the API call return 200" &mdash; a MicroVM can launch and still not be something you want serving requests.</p>
+        <p>Notice the second cutover attempt: the candidate's launch itself succeeded well enough to return a state, but that state was <code>TERMINATED</code>, and the orchestrator correctly refuses to move live traffic onto it. That's the entire point of gating on health rather than on "did the API call return 200". A MicroVM can launch and still not be something you want serving requests.</p>
 
         <aside class="callout production">
           <span class="callout-title">&#127981; In production</span>
-          <p>Keep at least one blue instance warm during a cutover window rather than terminating it the instant green passes its health check. Sessions that were mid-execution on blue when the cutover happened should be allowed to finish rather than getting cut off &mdash; drain blue on a timer (or once its active-session count hits zero), the same pattern you'd use for any stateful service, not just MicroVMs.</p>
+          <p>Keep at least one blue instance warm during a cutover window rather than terminating it the instant green passes its health check. Sessions that were mid-execution on blue when the cutover happened should be allowed to finish rather than getting cut off. Drain blue on a timer (or once its active-session count hits zero), the same pattern you'd use for any stateful service, not just MicroVMs.</p>
         </aside>
       </section>
 
       <section id="scaling">
         <h2>Scaling: When to Launch More MicroVMs</h2>
 
-        <p>Lambda MicroVMs has no autoscaling group, no target-tracking policy, and (per Chapter 13's research) no dedicated CloudWatch metrics namespace to drive one even if it did. The scaling signal is whatever your own orchestrator computes from <code>ListMicrovms</code> output and its own request queue &mdash; there is nothing built into the service to delegate this to.</p>
+        <p>Lambda MicroVMs has no autoscaling group, no target-tracking policy, and (per Chapter 13's research) no dedicated CloudWatch metrics namespace to drive one even if it did. The scaling signal is whatever your own orchestrator computes from <code>ListMicrovms</code> output and its own request queue. There is nothing built into the service to delegate this to.</p>
 
         <p>A minimal heuristic that's good enough for a bursty sandbox workload: launch another MicroVM if there are zero running and requests are queued, or if the backlog per running instance crosses a threshold; scale down if instances are idle with no queue. The example script's <code>decide_scaling_action</code> implements exactly this and the real output above shows all four branches: <code>launch</code> when nothing's running yet, <code>launch</code> when the backlog per instance is too deep, <code>scale_down</code> when instances sit idle, and <code>hold</code> when things are balanced.</p>
 
@@ -182,22 +182,22 @@ Candidate 14.1 failed health check (state=TERMINATED); aborting cutover, staying
 
         <p>Not every launch failure means the same thing. Chapter 13 already drew this distinction for execution-level errors: check whether a failure is transient (the instance is fine, the specific request failed) or structural (the instance itself is gone or never came up). The same split applies one level up, at the launch call itself.</p>
 
-        <p>A throttling or capacity error from <code>RunMicrovm</code> is transient &mdash; retrying with backoff is the right response, and Chapter 5's research already surfaced a real, easy-to-misread <code>ParamValidation</code> error (a missing <code>idlePolicy</code> field) that looks like it needs a retry but actually needs a code fix. Distinguishing those two cases matters: retrying a malformed request forever just wastes time and API calls. The example orchestrator's <code>launch_with_retry</code> only retries on a distinct <code>TransientLaunchError</code>, and lets anything else propagate immediately, for exactly this reason.</p>
+        <p>A throttling or capacity error from <code>RunMicrovm</code> is transient, and retrying with backoff is the right response, and Chapter 5's research already surfaced a real, easy-to-misread <code>ParamValidation</code> error (a missing <code>idlePolicy</code> field) that looks like it needs a retry but actually needs a code fix. Distinguishing those two cases matters: retrying a malformed request forever just wastes time and API calls. The example orchestrator's <code>launch_with_retry</code> only retries on a distinct <code>TransientLaunchError</code>, and lets anything else propagate immediately, for exactly this reason.</p>
 
-        <p>Backoff itself should be exponential and capped, with a little jitter, so that a fleet of orchestrator workers hitting the same throttle don't all retry in lockstep and re-trigger the same throttle a second later. The example script's backoff (<code>min(2 ** (attempt - 1), 8)</code> seconds plus a small random jitter) is a standard shape for this &mdash; nothing MicroVM-specific, the same pattern you'd use retrying any rate-limited AWS API call.</p>
+        <p>Backoff itself should be exponential and capped, with a little jitter, so that a fleet of orchestrator workers hitting the same throttle don't all retry in lockstep and re-trigger the same throttle a second later. The example script's backoff (<code>min(2 ** (attempt - 1), 8)</code> seconds plus a small random jitter) is a standard shape for this. Nothing MicroVM-specific; the same pattern you'd use retrying any rate-limited AWS API call.</p>
 
         <aside class="callout underhood">
           <span class="callout-title">&#128300; Under the hood</span>
-          <p>The AWS CLI itself already retries transient errors on most API calls by default (adaptive retry mode with exponential backoff), so if you're calling <code>RunMicrovm</code> through the CLI or an SDK rather than raw HTTP, you may already be getting some of this for free at the transport level. Application-level retry logic like this chapter's example still matters on top of that for anything the SDK doesn't retry automatically &mdash; a launch that "succeeds" into a bad state, for instance, which no HTTP-layer retry logic can detect.</p>
+          <p>The AWS CLI itself already retries transient errors on most API calls by default (adaptive retry mode with exponential backoff), so if you're calling <code>RunMicrovm</code> through the CLI or an SDK rather than raw HTTP, you may already be getting some of this for free at the transport level. Application-level retry logic like this chapter's example still matters on top of that for anything the SDK doesn't retry automatically, like a launch that "succeeds" into a bad state, which no HTTP-layer retry logic can detect.</p>
         </aside>
       </section>
 
       <section id="eight-hour-limit">
         <h2>Designing for the 8-Hour Limit</h2>
 
-        <p>Chapter 10 introduced the hard ceiling: <code>maximumDurationInSeconds</code> defaults to 28800 seconds, which is exactly 8 hours, confirmed on a real <code>RunMicrovm</code> response in this course's own research. Chapter 13 then showed what a clean expiry actually looks like from the outside &mdash; a real terminated instance with <code>"stateReason": "Success."</code>, indistinguishable at that field from an explicit <code>TerminateMicrovm</code> call. A production orchestrator has to plan for that termination before it happens, not just handle it afterward.</p>
+        <p>Chapter 10 introduced the hard ceiling: <code>maximumDurationInSeconds</code> defaults to 28800 seconds, which is exactly 8 hours, confirmed on a real <code>RunMicrovm</code> response in this course's own research. Chapter 13 then showed what a clean expiry actually looks like from the outside: a real terminated instance with <code>"stateReason": "Success."</code>, indistinguishable at that field from an explicit <code>TerminateMicrovm</code> call. A production orchestrator has to plan for that termination before it happens, not just handle it afterward.</p>
 
-        <p>The practical pattern is to track each instance's <code>startedAt</code> timestamp (also present on the real <code>RunMicrovm</code> response) and treat "approaching 8 hours" as its own health signal, distinct from the <code>RUNNING</code>/<code>SUSPENDED</code>/<code>TERMINATED</code> state machine Chapter 13 built. A long-running agent session that's going to need more than 8 hours of wall-clock time isn't a bug to work around inside one MicroVM &mdash; it's a signal to checkpoint whatever state matters (the same persistent-disk state Chapter 3 and Chapter 9 covered) and hand off to a freshly launched instance before the clock runs out, rather than discovering the hard way that the service terminated a session mid-task.</p>
+        <p>The practical pattern is to track each instance's <code>startedAt</code> timestamp (also present on the real <code>RunMicrovm</code> response) and treat "approaching 8 hours" as its own health signal, distinct from the <code>RUNNING</code>/<code>SUSPENDED</code>/<code>TERMINATED</code> state machine Chapter 13 built. A long-running agent session that's going to need more than 8 hours of wall-clock time is a signal to checkpoint whatever state matters (the same persistent-disk state Chapter 3 and Chapter 9 covered) and hand off to a freshly launched instance before the clock runs out, rather than discovering the hard way that the service terminated a session mid-task.</p>
 
         <p>Note that <code>maxIdleDurationSeconds</code> (Chapter 6/13's auto-suspend knob) and <code>maximumDurationInSeconds</code> are independent limits: a MicroVM that's actively handling requests can still be auto-suspended for being idle between them, and separately still hits the hard 8-hour ceiling regardless of how much of that time it spent suspended versus running. Neither one substitutes for the other in your orchestrator's bookkeeping.</p>
       </section>
@@ -225,7 +225,7 @@ Candidate 14.1 failed health check (state=TERMINATED); aborting cutover, staying
 
         <div class="tryit">
           <h3>&#9889; Try it</h3>
-          <p>Run <code>examples/ch14_orchestrator.py</code> to see a real retry-with-backoff sequence, a successful blue/green cutover, an aborted cutover against an unhealthy candidate, and all four branches of the scaling heuristic &mdash; entirely offline, no AWS calls required.</p>
+          <p>Run <code>examples/ch14_orchestrator.py</code> to see a real retry-with-backoff sequence, a successful blue/green cutover, an aborted cutover against an unhealthy candidate, and all four branches of the scaling heuristic, entirely offline, no AWS calls required.</p>
         </div>
       </section>
 

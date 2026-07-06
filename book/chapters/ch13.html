@@ -115,14 +115,14 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></
 
         <aside class="callout gotcha">
           <span class="callout-title">&#9888;&#65039; Gotcha</span>
-          <p>There is no dedicated CloudWatch <em>metrics</em> namespace for Lambda MicroVMs (no <code>AWS/LambdaMicroVMs</code> dimension in CloudWatch Metrics). If you need quantitative signals &mdash; error rates, p99 execution duration, executions per hour &mdash; you build them from log data using CloudWatch Logs Insights queries, or by polling <code>GetMicrovm</code>/<code>ListMicrovms</code> for state-based signals. Don't go looking for pre-built dashboards or metric alarms the way you would for Lambda Functions; they don't exist for this service today.</p>
+          <p>There is no dedicated CloudWatch <em>metrics</em> namespace for Lambda MicroVMs (no <code>AWS/LambdaMicroVMs</code> dimension in CloudWatch Metrics). If you need quantitative signals (error rates, p99 execution duration, executions per hour), you build them from log data using CloudWatch Logs Insights queries, or by polling <code>GetMicrovm</code>/<code>ListMicrovms</code> for state-based signals. Don't go looking for pre-built dashboards or metric alarms the way you would for Lambda Functions; they don't exist for this service today.</p>
         </aside>
       </section>
 
       <section id="tracing-execution">
         <h2>Tracing Execution Flow</h2>
 
-        <p>CloudWatch Logs captures whatever your application writes to stdout/stderr. That means structured logging is entirely your responsibility &mdash; there's no X-Ray integration or distributed tracing built into the service. The practical pattern is: emit one JSON object per log line, with a consistent <code>request_id</code> field across all events belonging to the same execution, so you can correlate them later in Logs Insights without parsing unstructured text.</p>
+        <p>CloudWatch Logs captures whatever your application writes to stdout/stderr. That means structured logging is entirely your responsibility. There's no X-Ray integration or distributed tracing built into the service. The practical pattern is: emit one JSON object per log line, with a consistent <code>request_id</code> field across all events belonging to the same execution, so you can correlate them later in Logs Insights without parsing unstructured text.</p>
 
         <p>The minimal set of fields that makes a log line useful after the fact:</p>
 
@@ -165,14 +165,14 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></
       <section id="debugging-failures">
         <h2>Debugging Slow or Failing Executions</h2>
 
-        <p>When a MicroVM execution fails, the error shows up in CloudWatch Logs as whatever your application wrote to stderr before it died. Real failures look like real tracebacks, not tidy single-line errors. Here's an actual failing execution captured from a running MicroVM &mdash; a timeout during initialization of an agent SDK inside the sandbox:</p>
+        <p>When a MicroVM execution fails, the error shows up in CloudWatch Logs as whatever your application wrote to stderr before it died. Real failures look like real tracebacks, not tidy single-line errors. Here's an actual failing execution captured from a running MicroVM, a timeout during initialization of an agent SDK inside the sandbox:</p>
 
         <figure class="codeblock">
           <figcaption class="code-label">Real traceback from CloudWatch log stream <code>2026/06/24[11.0]microvm-b510854e-...</code></figcaption>
           <pre><code class="language-text">Exception: Control request timeout: initialize</code></pre>
         </figure>
 
-        <p>And a second, distinct failure mode from the same log group &mdash; a case where the agent returned a success status but the orchestrator treated it as an error (a semantic failure rather than a crash):</p>
+        <p>And a second, distinct failure mode from the same log group: a case where the agent returned a success status but the orchestrator treated it as an error (a semantic failure rather than a crash):</p>
 
         <figure class="codeblock">
           <figcaption class="code-label">Second real failure from CloudWatch Logs Insights query</figcaption>
@@ -189,7 +189,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></
 | limit 10</code></pre>
         </figure>
 
-        <p>Query statistics from that real run: <code>recordsMatched: 18</code>, <code>recordsScanned: 2947</code>, <code>bytesScanned: 380376</code> over the 30-day window. Those are small numbers &mdash; consistent with a dev account &mdash; but the pattern scales: Logs Insights scans only the time range and log groups you specify, so pointing it at a single image's log group for the last hour is a fast, cheap way to find every exception across all sessions of that image without reading each stream by hand.</p>
+        <p>Query statistics from that real run: <code>recordsMatched: 18</code>, <code>recordsScanned: 2947</code>, <code>bytesScanned: 380376</code> over the 30-day window. Those are small numbers (consistent with a dev account), but the pattern scales: Logs Insights scans only the time range and log groups you specify, so pointing it at a single image's log group for the last hour is a fast, cheap way to find every exception across all sessions of that image without reading each stream by hand.</p>
 
         <aside class="callout production">
           <span class="callout-title">&#127981; In production</span>
@@ -210,11 +210,11 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></
           <li><strong><code>autoResumeEnabled</code></strong> &mdash; whether an incoming request automatically wakes a suspended instance. If false, suspended instances must be explicitly resumed via <code>ResumeMicrovm</code>.</li>
         </ul>
 
-        <p>There is no dedicated Cost Explorer or Budgets integration specific to Lambda MicroVMs. Cost visibility comes from the same sources as any other AWS service: the billing console's service-level breakdown and (if you need finer granularity) cost allocation tags applied to your MicroVM images. The observability-specific angle is: if you're running more MicroVMs than you need, or leaving them running longer than they're used, the signal is in your own logs and <code>ListMicrovms</code> output &mdash; count how many are in <code>RUNNING</code> state versus how many had an execution in the last N minutes, and you've built the only "cost metric" the service gives you the raw data for.</p>
+        <p>There is no dedicated Cost Explorer or Budgets integration specific to Lambda MicroVMs. Cost visibility comes from the same sources as any other AWS service: the billing console's service-level breakdown and (if you need finer granularity) cost allocation tags applied to your MicroVM images. The observability-specific angle is: if you're running more MicroVMs than you need, or leaving them running longer than they're used, the signal is in your own logs and <code>ListMicrovms</code> output. Count how many are in <code>RUNNING</code> state versus how many had an execution in the last N minutes, and you've built the only "cost metric" the service gives you the raw data for.</p>
 
         <aside class="callout underhood">
           <span class="callout-title">&#128300; Under the hood</span>
-          <p>Aggressive auto-suspend (e.g. <code>maxIdleDurationSeconds: 60</code>) is the simplest cost optimization for sandbox workloads where executions are bursty and separated by minutes or hours of idle time. The tradeoff is resume latency &mdash; typically a few hundred milliseconds to restore a snapshot, but variable depending on memory size. If your workload is latency-sensitive and bursty, measure resume times in your own logs before tightening the idle threshold.</p>
+          <p>Aggressive auto-suspend (e.g. <code>maxIdleDurationSeconds: 60</code>) is the simplest cost optimization for sandbox workloads where executions are bursty and separated by minutes or hours of idle time. The tradeoff is resume latency: typically a few hundred milliseconds to restore a snapshot, but variable depending on memory size. If your workload is latency-sensitive and bursty, measure resume times in your own logs before tightening the idle threshold.</p>
         </aside>
       </section>
 
@@ -266,7 +266,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></
 
         <div class="tryit">
           <h3>&#9889; Try it</h3>
-          <p>Run <code>examples/ch13_observability.py</code> to see structured JSON log lines emitted for successful and failing executions, plus health checks against simulated MicroVM states &mdash; entirely offline, no AWS calls required.</p>
+          <p>Run <code>examples/ch13_observability.py</code> to see structured JSON log lines emitted for successful and failing executions, plus health checks against simulated MicroVM states, entirely offline, no AWS calls required.</p>
         </div>
       </section>
 

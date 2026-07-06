@@ -92,26 +92,26 @@
       <section id="dedicated-vs-shared">
         <h2>One MicroVM per User vs. Shared MicroVMs</h2>
 
-        <p>Every chapter so far has assumed a single MicroVM serving a single workload. Once you have real tenants &mdash; different users, different customers, different API keys &mdash; you have to decide how many of them share a MicroVM, and the two ends of that spectrum trade off very differently.</p>
+        <p>Every chapter so far has assumed a single MicroVM serving a single workload. Once you have real tenants (different users, different customers, different API keys), you have to decide how many of them share a MicroVM, and the two ends of that spectrum trade off very differently.</p>
 
-        <p><strong>Dedicated per tenant</strong> gives each tenant their own MicroVM, launched on first use and held for as long as that tenant is active. Firecracker's <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">hardware-level isolation</a> (Chapter 2) then applies at the tenant boundary, not just the request boundary: one tenant's process table, filesystem, and memory are never visible to another, because they are never in the same guest kernel. This is the isolation model AWS itself calls out &mdash; the product page lists <a href="https://aws.amazon.com/lambda/lambda-microvms/" target="_blank" rel="noopener">"multi-tenant applications requiring per-user isolation"</a> as a named use case, and <code>notes/research.md</code>'s summary of that page describes the underlying guarantee as "dedicated MicroVM per session, no shared kernel between users."</p>
+        <p><strong>Dedicated per tenant</strong> gives each tenant their own MicroVM, launched on first use and held for as long as that tenant is active. Firecracker's <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">hardware-level isolation</a> (Chapter 2) then applies at the tenant boundary, not just the request boundary: one tenant's process table, filesystem, and memory are never visible to another, because they are never in the same guest kernel. This is the isolation model AWS itself calls out. The product page lists <a href="https://aws.amazon.com/lambda/lambda-microvms/" target="_blank" rel="noopener">"multi-tenant applications requiring per-user isolation"</a> as a named use case, and <code>notes/research.md</code>'s summary of that page describes the underlying guarantee as "dedicated MicroVM per session, no shared kernel between users."</p>
 
-        <p><strong>Shared pool</strong> instead routes many tenants through a small, fixed set of MicroVMs, reusing an instance across tenants over time. This costs less &mdash; you are not paying to keep hundreds of mostly-idle MicroVMs warm &mdash; but it pushes the isolation burden back onto your own code: nothing at the AWS API level stops one tenant's leftover files or environment variables from being visible to whichever tenant is routed to the same instance next. You own that boundary now, not Firecracker.</p>
+        <p><strong>Shared pool</strong> instead routes many tenants through a small, fixed set of MicroVMs, reusing an instance across tenants over time. This costs less (you are not paying to keep hundreds of mostly-idle MicroVMs warm), but it pushes the isolation burden back onto your own code: nothing at the AWS API level stops one tenant's leftover files or environment variables from being visible to whichever tenant is routed to the same instance next. You own that boundary now, not Firecracker.</p>
 
         <p>Most production systems land somewhere in between: dedicated MicroVMs for tenants who pay for it or whose workload demands it (long-running sessions, compliance requirements, workloads that install arbitrary packages per Chapter 8), and a shared pool for everyone else. The example below models exactly this split.</p>
 
         <aside class="callout production">
           <span class="callout-title">&#127981; In production</span>
-          <p>"Per-user isolation" in AWS's own use-case list is a real, intentional feature of the service &mdash; not something you're bolting on. But the service gives you the primitive (a MicroVM you can dedicate to one tenant); the policy of <em>which</em> tenants get a dedicated instance is yours to write, and that's most of this chapter.</p>
+          <p>"Per-user isolation" in AWS's own use-case list is a real, intentional feature of the service, not something you're bolting on. But the service gives you the primitive (a MicroVM you can dedicate to one tenant); the policy of <em>which</em> tenants get a dedicated instance is yours to write, and that's most of this chapter.</p>
         </aside>
       </section>
 
       <section id="session-routing">
         <h2>Session Management and Routing</h2>
 
-        <p>Whichever tier a tenant lands in, something in front of <code>RunMicrovm</code> has to decide, for every incoming request: does this tenant already have an assigned MicroVM, or does one need to be created (or reused from a pool)? That decision is session routing, and it sits above the AWS API entirely &mdash; <code>RunMicrovm</code>, <code>GetMicrovm</code>, and the rest (Chapters 5&ndash;6) don't know anything about tenants, only about MicroVM identifiers.</p>
+        <p>Whichever tier a tenant lands in, something in front of <code>RunMicrovm</code> has to decide, for every incoming request: does this tenant already have an assigned MicroVM, or does one need to be created (or reused from a pool)? That decision is session routing, and it sits above the AWS API entirely. <code>RunMicrovm</code>, <code>GetMicrovm</code>, and the rest (Chapters 5&ndash;6) don't know anything about tenants, only about MicroVM identifiers.</p>
 
-        <p>A minimal router needs three pieces of state: which tenants are dedicated and which MicroVM they own, which shared-pool slots exist and who currently owns each one, and an eviction order for the shared pool so that when it's full, the router has a deterministic answer for who gets bumped. The example below implements exactly this, entirely in Python, with no AWS calls &mdash; it is a simulation of the routing <em>logic</em> a real orchestrator would run in front of the real API from Chapters 5&ndash;6, not a replacement for that API.</p>
+        <p>A minimal router needs three pieces of state: which tenants are dedicated and which MicroVM they own, which shared-pool slots exist and who currently owns each one, and an eviction order for the shared pool so that when it's full, the router has a deterministic answer for who gets bumped. The example below implements exactly this, entirely in Python, with no AWS calls. It is a simulation of the routing <em>logic</em> a real orchestrator would run in front of the real API from Chapters 5&ndash;6, not a replacement for that API.</p>
 
         <figure class="codeblock">
           <figcaption class="code-label">examples/ch11_session_manager.py &mdash; real output from running this script locally</figcaption>
@@ -132,11 +132,11 @@
   still launched: ['microvm-mock-0002', 'microvm-mock-0003', 'microvm-mock-0004']</code></pre>
         </figure>
 
-        <p>Two things worth noticing in that output. First, dedicated tenants keep the exact same <code>microvm_id</code> across repeated requests &mdash; that's the whole point of the tier, and it's why the router has to remember tenant &rarr; MicroVM mappings rather than just calling <code>RunMicrovm</code> fresh every time. Second, the shared pool with only two slots starts evicting almost immediately once a third distinct tenant shows up, and every eviction is logged as a cleanup event &mdash; which is the subject of the next section.</p>
+        <p>Two things worth noticing in that output. First, dedicated tenants keep the exact same <code>microvm_id</code> across repeated requests. That's the whole point of the tier, and it's why the router has to remember tenant &rarr; MicroVM mappings rather than just calling <code>RunMicrovm</code> fresh every time. Second, the shared pool with only two slots starts evicting almost immediately once a third distinct tenant shows up, and every eviction is logged as a cleanup event, which is the subject of the next section.</p>
 
         <aside class="callout gotcha">
           <span class="callout-title">&#9888;&#65039; Gotcha</span>
-          <p>A router that calls <code>RunMicrovm</code> synchronously on the request path adds real latency &mdash; Chapter 3 noted Firecracker's own boot time is under 125ms, but image/network setup on top of that was closer to a few seconds in the live transcript captured for Chapters 5&ndash;6. For dedicated tenants this cost is paid once, at first use. For a shared pool that's constantly evicting and reassigning slots under load, that per-request cost becomes the norm, not the exception &mdash; another argument for sizing the pool to your actual concurrent-tenant count rather than making it as small as possible to save cost.</p>
+          <p>A router that calls <code>RunMicrovm</code> synchronously on the request path adds real latency. Chapter 3 noted Firecracker's own boot time is under 125ms, but image/network setup on top of that was closer to a few seconds in the live transcript captured for Chapters 5&ndash;6. For dedicated tenants this cost is paid once, at first use. For a shared pool that's constantly evicting and reassigning slots under load, that per-request cost becomes the norm, not the exception. That's another argument for sizing the pool to your actual concurrent-tenant count rather than making it as small as possible to save cost.</p>
         </aside>
       </section>
 
@@ -146,25 +146,25 @@
         <p>The dedicated/shared decision is fundamentally a cost-vs-isolation tradeoff, and it's worth being explicit about what you're buying on each side rather than picking one tier for the whole system by default.</p>
 
         <ul>
-          <li><strong>Dedicated MicroVMs cost more to keep warm.</strong> Even with an aggressive <code>maxIdleDurationSeconds</code> (Chapter 6) suspending an idle tenant's MicroVM, you are still paying for a distinct instance, a distinct endpoint, and distinct snapshot storage per tenant. At scale &mdash; thousands of low-activity tenants &mdash; that adds up even with suspension helping.</li>
+          <li><strong>Dedicated MicroVMs cost more to keep warm.</strong> Even with an aggressive <code>maxIdleDurationSeconds</code> (Chapter 6) suspending an idle tenant's MicroVM, you are still paying for a distinct instance, a distinct endpoint, and distinct snapshot storage per tenant. At scale, meaning thousands of low-activity tenants, that adds up even with suspension helping.</li>
           <li><strong>Dedicated MicroVMs give you the isolation guarantee for free.</strong> You don't have to write cleanup code, audit it, or worry about a bug in that cleanup code leaking one tenant's data to the next, because there is no "next" on the same instance.</li>
           <li><strong>Shared pools cost less per tenant</strong> because a fixed, small number of MicroVMs serves an arbitrarily larger number of low-activity tenants. This is the same economic argument as connection pooling in a database driver, applied to compute instead of connections.</li>
           <li><strong>Shared pools push isolation risk onto your own code.</strong> Every bug in the cleanup step covered in the next section is a potential cross-tenant data leak. That is a materially different risk profile than the dedicated tier's "Firecracker's boundary handles it."</li>
         </ul>
 
-        <p>A reasonable default: dedicated for any tenant whose workload involves secrets, long-lived state, or a compliance requirement that specifically names per-tenant isolation; shared pool for short, stateless, low-trust requests (a public code-execution playground, a free tier with rate limits) where the isolation given up is a request-level VM boundary, not a data-confidentiality boundary &mdash; and where you have already applied the request-level defenses from Chapter 10 regardless of tier.</p>
+        <p>A reasonable default: dedicated for any tenant whose workload involves secrets, long-lived state, or a compliance requirement that specifically names per-tenant isolation; shared pool for short, stateless, low-trust requests (a public code-execution playground, a free tier with rate limits) where the isolation given up is a request-level VM boundary, not a data-confidentiality boundary, and where you have already applied the request-level defenses from Chapter 10 regardless of tier.</p>
       </section>
 
       <section id="cleaning-state">
         <h2>Cleaning State Between Users</h2>
 
-        <p>If you choose a shared pool for any tier of tenant, "clean the instance between users" is not optional polish &mdash; it is the entire isolation mechanism for that tier, and it has to happen on every single reassignment, not just "usually." Chapter 9 covered cleaning a single tenant's own leftover files between their own requests; this is the same problem at the tenant boundary, where the stakes are cross-customer data exposure rather than one user's own disk filling up.</p>
+        <p>If you choose a shared pool for any tier of tenant, "clean the instance between users" is not optional polish. It is the entire isolation mechanism for that tier, and it has to happen on every single reassignment, not just "usually." Chapter 9 covered cleaning a single tenant's own leftover files between their own requests; this is the same problem at the tenant boundary, where the stakes are cross-customer data exposure rather than one user's own disk filling up.</p>
 
         <p>What "clean" has to mean in practice, on a shared MicroVM:</p>
 
         <ul>
           <li><strong>Filesystem.</strong> Any file the previous tenant wrote into a shared working directory. Chapter 9's approach (wipe a scoped working directory rather than trying to enumerate and delete individual files) applies directly here.</li>
-          <li><strong>Process state.</strong> Kill any lingering child processes, background jobs, or long-running servers the previous tenant started. A shared MicroVM that reuses a Python interpreter process across tenants is especially dangerous here &mdash; module-level globals, open file handles, and cached imports can all carry state across the boundary.</li>
+          <li><strong>Process state.</strong> Kill any lingering child processes, background jobs, or long-running servers the previous tenant started. A shared MicroVM that reuses a Python interpreter process across tenants is especially dangerous here: module-level globals, open file handles, and cached imports can all carry state across the boundary.</li>
           <li><strong>Environment variables and secrets.</strong> If the previous tenant's request injected an API key or credential into the guest's environment, that has to be scrubbed before the next tenant's code can run, or their process can read it.</li>
           <li><strong>Network connections.</strong> Any outbound connection the previous tenant's code opened (Chapter 7) should be closed, not left dangling for the next tenant to inherit or observe.</li>
         </ul>
