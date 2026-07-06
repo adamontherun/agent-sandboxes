@@ -368,3 +368,28 @@ working example images to reuse: `lambda-microvms-poc-hello-world`,
 drafting agent should decide whether the "Hello, Sandbox" challenge needs an
 actual fresh build to be honest, and if so, run exactly ONE real build,
 capture its output, and note the real wall-clock time observed.
+
+## Chapter 12 (Security Hardening) citation reuse
+
+Chapter 12 reused the KVM/seccomp/jailer research already captured above
+("Firecracker Jailer Security Model" section) rather than re-deriving it, and
+verified (live, 2026-07-06) that all four citation URLs used in the chapter
+still resolve with HTTP 200:
+- `https://firecracker-microvm.github.io/` &mdash; KVM framing quote and the
+  jailer "second line of defense" quote, both confirmed present on the page.
+- `https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md`
+  &mdash; jailer disclaimer quote and flag mechanics (chroot via `pivot_root()`,
+  `--cgroup`/`--resource-limit`, uid/gid drop), confirmed present.
+- `https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md`
+  &mdash; cgroup resource-limit specifics (`memory.limit_in_bytes`,
+  `cpu.cfs_quota_us`, `blkio.throttle.io_serviced`), already captured above
+  and reused rather than re-fetched line-by-line.
+- `https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html`
+  &mdash; default network connectors (`HTTP_INGRESS`/`INTERNET_EGRESS`),
+  same source already used in Chapter 7's egress-control research.
+
+The chapter's application-level code scanner (`examples/ch12_code_scanner.py`,
+`challenges/ch12.py`, `solutions/ch12.py`) is original to Chapter 12 and not
+sourced from an external doc &mdash; it's framed explicitly in the chapter text
+as the app-level complement to the OS-level KVM/seccomp/jailer layers, not a
+restatement of them.

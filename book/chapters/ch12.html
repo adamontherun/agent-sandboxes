@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 12 &middot; Security Hardening &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Restrict egress, block dangerous operations, validate untrusted code before it runs, and understand the KVM/seccomp/jailer layers underneath the MicroVM boundary. Chapter 12 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part IV &middot; Advanced Patterns.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, security hardening, egress control, seccomp, jailer, kvm, code validation">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch12.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 12 &middot; Security Hardening &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Restrict egress, block dangerous operations, validate untrusted code before it runs, and understand the KVM/seccomp/jailer layers underneath the MicroVM boundary.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch12.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 12 &middot; Security Hardening">
+<meta name="twitter:description" content="Restrict egress, block dangerous operations, validate untrusted code before it runs, and understand the KVM/seccomp/jailer layers underneath the MicroVM boundary.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 12,
+  "name": "Security Hardening",
+  "description": "Restrict egress, block dangerous operations, validate untrusted code before it runs, and understand the KVM/seccomp/jailer layers underneath the MicroVM boundary.",
+  "url": "{{PAGES_URL}}chapters/ch12.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch11.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch13.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Networking and Egress Control</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Storage and State</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>File System Isolation</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ol>
+      <p class="part-label">Part IV &middot; Advanced Patterns</p>
+      <ol start="11">
+        <li><a href="ch11.html"><span class="ch-num">11</span>Multi-Tenant Isolation</a></li>
+        <li><a href="ch12.html" class="current"><span class="ch-num">12</span>Security Hardening</a></li>
+        <li><a href="ch13.html"><span class="ch-num">13</span>Observability and Debugging</a></li>
+        <li><a href="ch14.html"><span class="ch-num">14</span>Production Patterns</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 12</p>
+        <h1>Security Hardening</h1>
+        <p class="subtitle">A MicroVM gives you a strong isolation boundary by default. Hardening a sandbox is the discipline of not undoing that boundary at every layer above it.</p>
+      </header>
+
+      <section id="egress-control">
+        <h2>Network Restrictions and Egress Control</h2>
+
+        <p>Chapter 7 introduced the two network connectors a MicroVM launches with: <a href="https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html" target="_blank" rel="noopener"><code>HTTP_INGRESS</code> and <code>INTERNET_EGRESS</code></a>, both attached by default unless you override them with <code>--ingress-network-connectors</code>/<code>--egress-network-connectors</code> on <code>RunMicrovm</code>. That default is convenient for getting a sandbox working, and wrong for a hardened one: untrusted code with unrestricted internet egress can exfiltrate data, reach an attacker's command-and-control endpoint, or use your MicroVM as a relay for outbound abuse, and none of that requires it to escape the VM at all &mdash; it just has to make an HTTP request.</p>
+
+        <p>Hardening egress means treating "no outbound network access" as the default and adding back only what a given sandbox's workload actually needs, the reverse of the service's own out-of-the-box default. A code-execution sandbox for a data-analysis agent might need <code>pip</code>/PyPI access (Chapter 8) and nothing else; a general-purpose coding assistant sandbox might need package registries and a handful of API endpoints the agent is explicitly allowed to call. Neither needs unrestricted internet access, and granting it by default is the single easiest way to turn a contained code-execution bug into a data exfiltration incident.</p>
+
+        <p>The same discipline applies to self-hosted Firecracker deployments that don't have Lambda's managed network connectors to lean on. A forward proxy in front of the guest's only route out &mdash; allow-listing destination hosts rather than trying to block a deny-list of bad ones &mdash; is the standard pattern: a deny-list has to anticipate every bad destination in advance, while an allow-list fails closed by construction. A Squid proxy configured with an explicit <code>http_access allow</code> allow-list (and everything else implicitly denied) is a common, well-understood way to implement this without touching the guest's own iptables rules, which the guest's untrusted code could otherwise tamper with if it ever got enough privilege inside the VM to try.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888;&#65039; Gotcha</span>
+          <p>Blocking egress at the network layer does not block DNS-based exfiltration by itself &mdash; a process that can resolve arbitrary hostnames can smuggle small amounts of data out one DNS query at a time, even with HTTP/HTTPS egress fully blocked. An allow-list has to constrain DNS resolution too (only resolve to your allowed destinations, or route DNS through the same proxy that enforces the HTTP allow-list), not just the transport-layer connection.</p>
+        </aside>
+      </section>
+
+      <section id="dangerous-operations">
+        <h2>Dangerous Operations to Block</h2>
+
+        <p>Some operations are worth blocking regardless of what the sandbox's workload is nominally supposed to do, because no legitimate use of an untrusted-code sandbox needs them and every one of them is a documented building block of a sandbox escape or a denial-of-service against the host:</p>
+
+        <ul>
+          <li><strong>Shelling out with an interpreted shell string</strong> &mdash; <code>os.system</code>, <code>subprocess.run(..., shell=True)</code>, and equivalents hand a string straight to <code>/bin/sh</code>, which turns any string-formatting bug in your own code into arbitrary command execution, not just whatever command you intended to run.</li>
+          <li><strong>Raw syscall or FFI access</strong> &mdash; <code>ctypes</code>, <code>cffi</code>, and similar let code call arbitrary C functions and make raw syscalls directly, sidestepping any restriction you've placed at the Python level entirely. Chapter 7's <code>subprocess.run</code> timeout, for instance, has no effect on code that never goes through <code>subprocess</code> at all.</li>
+          <li><strong>Fork bombs and uncontrolled process creation</strong> &mdash; <code>os.fork()</code> in a loop (or any unbounded process-spawning pattern) can exhaust a host's process table before a wall-clock timeout even fires. This is exactly the class of attack Chapter 10's resource limits and the jailer's cgroup controls (below) exist to contain at the OS level, but rejecting the pattern before execution is cheaper than relying on the limit to kick in.</li>
+          <li><strong>Raw socket access</strong> &mdash; <code>socket.socket()</code> called directly, rather than through an HTTP client that respects your egress allow-list, is a way to route around the allow-list rather than through it.</li>
+          <li><strong><code>eval</code>/<code>exec</code> of untrusted strings</strong> &mdash; running a string as code inside code that is already untrusted collapses whatever review or scanning you did on the original snippet, since the actual behavior is decided at runtime from data your scanner never saw.</li>
+        </ul>
+
+        <p>None of this is a complete list, and it isn't meant to be &mdash; it's the small set of patterns worth blocking unconditionally, before you even get to whether a particular sandbox's workload needs broader restrictions on top.</p>
+      </section>
+
+      <section id="validating-code">
+        <h2>Validating User Code Before Execution</h2>
+
+        <p>Every defense discussed so far in this book &mdash; the MicroVM boundary itself, egress restrictions, resource limits &mdash; operates once code is already running inside the guest. There's a cheaper layer available before that: reject obviously dangerous code before it is ever handed to <code>RunMicrovm</code> at all. This is squarely an <strong>application-level</strong> control, and it is deliberately not a replacement for anything below it in this chapter &mdash; a static scanner over source text can be defeated by encoding a payload as a base64 string and decoding it at runtime, or by building a dangerous call out of <code>getattr</code> indirection. What it buys you is cheap: rejecting an obviously malicious snippet in milliseconds, without ever paying for a MicroVM launch, and without relying on the OS-level layers to be the only thing standing between untrusted code and the host.</p>
+
+        <p>The example below is a static scanner built on Python's own <code>ast</code> module rather than regular expressions over source text &mdash; parsing the code into a syntax tree means <code>os . system(...)</code> with extra whitespace, or a call written as <code>getattr(os, "sys" + "tem")</code>, is caught by structure rather than missed by a brittle string match (the <code>getattr</code>-indirection case specifically is still not caught here, which is exactly the kind of gap worth naming rather than glossing over). It walks the tree looking for three things: dangerous imports (<code>ctypes</code>, <code>cffi</code>), calls to a fixed set of dangerous fully-qualified names (<code>os.system</code>, <code>subprocess.run</code>, <code>socket.socket</code>, and the rest of the previous section's list), and any call carrying a <code>shell=True</code> keyword argument regardless of which function it's attached to.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch12_code_scanner.py &mdash; real output from running this script locally</figcaption>
+          <pre><code class="language-text">[ALLOW] safe: basic arithmetic
+[ALLOW] safe: pandas-style data work
+[BLOCK] dangerous: os.system shell-out
+    - line 3: call to 'os.system' is blocked
+[BLOCK] dangerous: subprocess shell=True
+    - line 3: call to 'subprocess.run' is blocked
+    - line 3: 'shell=True' is blocked
+[BLOCK] dangerous: raw ctypes syscall access
+    - line 2: import of 'ctypes' is blocked
+[BLOCK] dangerous: fork bomb
+    - line 4: call to 'os.fork' is blocked
+[BLOCK] dangerous: eval of untrusted string
+    - line 3: call to 'eval' is blocked
+[BLOCK] dangerous: raw socket
+    - line 3: call to 'socket.socket' is blocked</code></pre>
+        </figure>
+
+        <p>Notice the <code>shell=True</code> sample produces two separate violations &mdash; one for the call target (<code>subprocess.run</code> is itself blocked, since it can spawn arbitrary processes even without a shell) and one for the keyword argument. That overlap is intentional: the keyword check exists precisely so that a wrapper function hiding the real call target still gets caught by the <code>shell=True</code> pattern even if the call target itself weren't already on the list.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Treat a static scanner as a fast-reject filter, not a security boundary. It exists to save the cost of a MicroVM launch on code that's obviously hostile and to give a user immediate feedback ("this snippet uses a blocked import") instead of a confusing runtime failure inside the sandbox. The MicroVM boundary, seccomp filters, and jailer isolation below are what actually contain code that gets past the scanner &mdash; deliberately or not.</p>
+        </aside>
+      </section>
+
+      <section id="monitoring">
+        <h2>Monitoring for Malicious Behavior</h2>
+
+        <p>Validation before execution catches what you can recognize in the source text. Monitoring during and after execution catches what you can't &mdash; behavior that only shows up once code is actually running, whether because it was obfuscated past the scanner or because the behavior in question isn't a static pattern at all (an unusually long-running process, an unexpectedly large amount of outbound data, a spike in CPU that doesn't match the workload).</p>
+
+        <p>Three signals are worth watching for every execution, building directly on infrastructure earlier chapters already introduced:</p>
+
+        <ul>
+          <li><strong>Resource usage anomalies.</strong> Chapter 10's per-execution CPU/memory/disk limits stop a single runaway process from exhausting the host, but the limits themselves are also a monitoring signal: a sandbox that repeatedly hits its memory ceiling, or one whose CPU usage pattern looks like a mining workload rather than the agent task it was launched for, is worth flagging even though the limit itself already contained the immediate damage.</li>
+          <li><strong>Egress volume and destination anomalies.</strong> If the egress allow-list from earlier in this chapter is in place, an execution that tries to reach a host outside that list is itself a monitoring event, not just a blocked connection &mdash; a legitimate workload doesn't normally probe for hosts it isn't allowed to reach, and a pattern of repeated denied attempts is a stronger signal than any single one.</li>
+          <li><strong>Execution duration outliers.</strong> A code snippet that normally finishes in under a second and is now running for minutes is worth surfacing even before Chapter 10's hard timeout fires, since the timeout is a backstop, not an early-warning system.</li>
+        </ul>
+
+        <p>Chapter 13 covers the CloudWatch integration and logging patterns that make this practical to build; this chapter's job is naming what's worth watching for, since the plumbing to watch it is a separate concern from deciding what "malicious" looks like for your workload.</p>
+      </section>
+
+      <section id="firecracker-security-layers">
+        <h2>Understanding Firecracker's Security Layers</h2>
+
+        <p>Everything above this section happens in your application, above the MicroVM boundary. This section is about what's underneath that boundary &mdash; the layers Firecracker itself provides, which apply whether or not your application-level scanner catches everything. Chapter 2 introduced these briefly; here's the security-specific detail on each.</p>
+
+        <h3>KVM: hardware-enforced isolation</h3>
+        <p>Firecracker's own documentation states the foundation plainly: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">"Firecracker microVMs use KVM-based virtualizations that provide enhanced security over traditional VMs."</a> KVM means the guest is running behind actual CPU-level virtualization (VT-x/AMD-V), with its own kernel and its own address space, separated from the host by hardware privilege levels rather than by a Linux namespace or cgroup. That's a categorically different boundary than a container: escaping it requires a hypervisor-level vulnerability, not just a kernel bug reachable from an unprivileged process, which is why it's the layer everything else in this chapter is built on top of rather than a replacement for.</p>
+
+        <h3>Seccomp: restricting what the VMM itself can do</h3>
+        <p>KVM isolates the guest from the host. Seccomp restricts what Firecracker's own host-side process (the VMM) is allowed to do, in case an attacker somehow escapes the guest and lands in that process. Firecracker installs thread-specific seccomp-BPF filters that allow-list the specific syscalls each of its threads needs and deny everything else &mdash; the same allow-list-over-deny-list logic as the egress proxy earlier in this chapter, applied to the syscall table instead of the network. An attacker who breaks out of the guest doesn't get a general-purpose host process to work with; they get a process that can only make the small set of syscalls Firecracker itself needs to run a microVM.</p>
+
+        <h3>Jailer: a second line of defense</h3>
+        <p>The jailer is a separate companion program that wraps the Firecracker process with conventional Linux sandboxing, on top of the virtualization boundary and the seccomp filters. Per the jailer's own documentation, it "is a program designed to isolate the Firecracker process in order to enhance Firecracker's security posture" and is meant to address Firecracker's security needs specifically &mdash; <a href="https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md" target="_blank" rel="noopener">not a general-purpose sandboxing tool</a>. Concretely, before the Firecracker binary is ever exec'd, the jailer:</p>
+
+        <ul>
+          <li>Builds a chroot jail via <code>pivot_root()</code>, so the Firecracker process's filesystem view is limited to a directory tree the jailer constructed, not the host's real root.</li>
+          <li>Creates dedicated mount, PID, and (optionally, via <code>--new-pid-ns</code>) network namespaces.</li>
+          <li>Applies cgroup resource limits &mdash; <code>--cgroup</code> for arbitrary cgroup controller values, plus a dedicated <code>--resource-limit</code> flag for things like open file descriptor counts and file size, using the same cgroups v1/v2 mechanism <a href="https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md" target="_blank" rel="noopener">Firecracker's production host setup guide</a> documents for per-instance memory (<code>memory.limit_in_bytes</code>), CPU (<code>cpu.cfs_quota_us</code>), and disk I/O (<code>blkio.throttle.io_serviced</code>) controls &mdash; the same primitives Chapter 7's under-the-hood note referenced for resource limiting.</li>
+          <li>Drops privileges to a specified non-root <code>--uid</code>/<code>--gid</code> before finally exec'ing Firecracker, so the running VMM process never holds more privilege on the host than it was explicitly given.</li>
+        </ul>
+
+        <p>Firecracker's documentation frames the relationship between these layers directly: each microVM is "further isolated with common Linux user-space security barriers by a companion program called 'jailer,'" which "provides a second line of defense in case the virtualization barrier is ever compromised." That's the whole point of defense in depth here &mdash; KVM is the primary wall, seccomp narrows what a host-side escape can do, and the jailer's namespaces/chroot/cgroups/uid-drop are a second, independent wall that doesn't depend on the first one holding.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>Lambda MicroVMs runs on this same Firecracker foundation, but you never invoke the jailer yourself &mdash; AWS operates it as part of the managed service, the same way you never see the seccomp filter files or the chroot setup. Understanding these layers matters for this course anyway, for two reasons: it's what "MicroVM-level isolation" concretely means when Chapter 1 first claimed it was stronger than a container, and it's exactly what you'd need to configure yourself if Chapter 17's self-hosted Firecracker path is ever the right call for a workload Lambda MicroVMs doesn't fit.</p>
+        </aside>
+
+        <p class="source">Sources: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">Firecracker project page</a> (KVM and jailer framing quotes); <a href="https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md" target="_blank" rel="noopener">firecracker/docs/jailer.md</a> (jailer mechanics and flags); <a href="https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md" target="_blank" rel="noopener">firecracker/docs/prod-host-setup.md</a> (cgroup resource-limit specifics).</p>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Harden Your Sandbox Against Common Attacks</h2>
+
+        <p>Your challenge is to build the application-level scanner described earlier in this chapter: a validator that inspects Python source before it is ever handed to a MicroVM, and rejects the patterns this chapter named as unconditionally dangerous.</p>
+
+        <p>Open <code>challenges/ch12.py</code> and implement <code>SandboxHardener.scan()</code>:</p>
+
+        <ul>
+          <li>Block imports of <code>ctypes</code> or <code>cffi</code> (raw FFI/syscall access), in both <code>import</code> and <code>from ... import</code> form.</li>
+          <li>Block calls to <code>os.system</code>, <code>os.popen</code>, <code>os.fork</code>, <code>os.execv</code>/<code>execve</code>/<code>execl</code>, <code>subprocess.Popen</code>/<code>call</code>/<code>run</code>/<code>check_output</code>, and <code>socket.socket</code>.</li>
+          <li>Block any call carrying a <code>shell=True</code> keyword argument, regardless of which function it's attached to.</li>
+          <li>Block the builtins <code>eval</code>, <code>exec</code>, and <code>__import__</code>.</li>
+          <li>Treat a snippet that fails to parse as unsafe &mdash; code you can't parse is code you can't reason about.</li>
+          <li>Leave ordinary code (arithmetic, comprehensions, safe stdlib use like <code>json</code>) alone: it must come back <code>safe=True</code> with no violations.</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges &amp;&amp; python3 -m pytest ch12_test.py -v</code></pre>
+
+        <p>Fifteen tests cover safe code passing cleanly, each dangerous import/call/builtin being caught, the <code>shell=True</code> keyword check firing even when attached to an otherwise-unlisted call, and syntax errors being treated as unsafe rather than silently allowed. See <code>solutions/ch12.py</code> when you're ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>Run <code>examples/ch12_code_scanner.py</code> to see the reference scanner classify a mix of safe and deliberately dangerous snippets &mdash; fork bombs, raw <code>ctypes</code> access, <code>eval</code> of untrusted input, and more &mdash; entirely offline, with no MicroVM launch required.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch11.html">Chapter 11: Multi-Tenant Isolation</a>
+        <a class="next" href="ch13.html">Chapter 13: Observability and Debugging</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>
