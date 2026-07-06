@@ -22,74 +22,76 @@ def get_lifecycle_class():
 MicrovmLifecycle, InvalidTransitionError = get_lifecycle_class()
 
 
+def suspended_vm():
+    """Return a MicroVM driven to the SUSPENDED state."""
+    vm = MicrovmLifecycle()
+    vm.run()
+    vm.suspend()
+    vm.suspend_complete()
+    return vm
+
+
 class TestInitialState:
-    def test_starts_in_creating(self):
+    def test_starts_in_pending(self):
         vm = MicrovmLifecycle()
-        assert vm.state == "CREATING"
+        assert vm.state == "PENDING"
 
 
 class TestValidTransitions:
-    def test_creating_to_running(self):
+    def test_pending_to_running(self):
         vm = MicrovmLifecycle()
         vm.run()
         assert vm.state == "RUNNING"
 
-    def test_running_to_idle(self):
+    def test_running_to_suspending(self):
         vm = MicrovmLifecycle()
         vm.run()
-        vm.idle()
-        assert vm.state == "IDLE"
-
-    def test_idle_to_suspended(self):
-        vm = MicrovmLifecycle()
-        vm.run()
-        vm.idle()
         vm.suspend()
+        assert vm.state == "SUSPENDING"
+
+    def test_suspending_to_suspended(self):
+        vm = MicrovmLifecycle()
+        vm.run()
+        vm.suspend()
+        vm.suspend_complete()
         assert vm.state == "SUSPENDED"
 
     def test_suspended_to_running(self):
-        vm = MicrovmLifecycle()
-        vm.run()
-        vm.idle()
-        vm.suspend()
+        vm = suspended_vm()
         vm.resume()
         assert vm.state == "RUNNING"
 
-    def test_terminate_from_running(self):
+    def test_running_to_terminating(self):
         vm = MicrovmLifecycle()
         vm.run()
         vm.terminate()
-        assert vm.state == "TERMINATED"
+        assert vm.state == "TERMINATING"
 
-    def test_terminate_from_idle(self):
-        vm = MicrovmLifecycle()
-        vm.run()
-        vm.idle()
+    def test_suspended_to_terminating(self):
+        vm = suspended_vm()
         vm.terminate()
-        assert vm.state == "TERMINATED"
+        assert vm.state == "TERMINATING"
 
-    def test_terminate_from_suspended(self):
+    def test_terminating_to_terminated(self):
         vm = MicrovmLifecycle()
         vm.run()
-        vm.idle()
-        vm.suspend()
         vm.terminate()
+        vm.terminate_complete()
         assert vm.state == "TERMINATED"
 
 
 class TestInvalidTransitions:
-    def test_cannot_idle_from_creating(self):
+    def test_cannot_suspend_from_pending(self):
         vm = MicrovmLifecycle()
         with pytest.raises(InvalidTransitionError) as exc_info:
-            vm.idle()
-        assert exc_info.value.current_state == "CREATING"
-        assert exc_info.value.action == "idle"
-
-    def test_cannot_suspend_from_running(self):
-        vm = MicrovmLifecycle()
-        vm.run()
-        with pytest.raises(InvalidTransitionError):
             vm.suspend()
+        assert exc_info.value.current_state == "PENDING"
+        assert exc_info.value.action == "suspend"
+
+    def test_cannot_terminate_from_pending(self):
+        vm = MicrovmLifecycle()
+        with pytest.raises(InvalidTransitionError):
+            vm.terminate()
 
     def test_cannot_resume_from_running(self):
         vm = MicrovmLifecycle()
@@ -103,77 +105,77 @@ class TestInvalidTransitions:
         with pytest.raises(InvalidTransitionError):
             vm.run()
 
+    def test_cannot_terminate_while_suspending(self):
+        vm = MicrovmLifecycle()
+        vm.run()
+        vm.suspend()  # now SUSPENDING
+        with pytest.raises(InvalidTransitionError):
+            vm.terminate()
+
     def test_cannot_do_anything_from_terminated(self):
         vm = MicrovmLifecycle()
         vm.run()
         vm.terminate()
-        with pytest.raises(InvalidTransitionError):
-            vm.run()
-        with pytest.raises(InvalidTransitionError):
-            vm.idle()
-        with pytest.raises(InvalidTransitionError):
-            vm.suspend()
-        with pytest.raises(InvalidTransitionError):
-            vm.resume()
-        with pytest.raises(InvalidTransitionError):
-            vm.terminate()
-
-    def test_cannot_terminate_from_creating(self):
-        vm = MicrovmLifecycle()
-        with pytest.raises(InvalidTransitionError):
-            vm.terminate()
+        vm.terminate_complete()
+        for action in (vm.run, vm.suspend, vm.suspend_complete, vm.resume, vm.terminate):
+            with pytest.raises(InvalidTransitionError):
+                action()
 
 
 class TestValidTransitionsMethod:
-    def test_creating_valid_transitions(self):
+    def test_pending_valid_transitions(self):
         vm = MicrovmLifecycle()
         assert vm.valid_transitions() == ["run"]
 
     def test_running_valid_transitions(self):
         vm = MicrovmLifecycle()
         vm.run()
-        assert sorted(vm.valid_transitions()) == ["idle", "terminate"]
-
-    def test_idle_valid_transitions(self):
-        vm = MicrovmLifecycle()
-        vm.run()
-        vm.idle()
         assert sorted(vm.valid_transitions()) == ["suspend", "terminate"]
 
-    def test_suspended_valid_transitions(self):
+    def test_suspending_valid_transitions(self):
         vm = MicrovmLifecycle()
         vm.run()
-        vm.idle()
         vm.suspend()
+        assert vm.valid_transitions() == ["suspend_complete"]
+
+    def test_suspended_valid_transitions(self):
+        vm = suspended_vm()
         assert sorted(vm.valid_transitions()) == ["resume", "terminate"]
+
+    def test_terminating_valid_transitions(self):
+        vm = MicrovmLifecycle()
+        vm.run()
+        vm.terminate()
+        assert vm.valid_transitions() == ["terminate_complete"]
 
     def test_terminated_valid_transitions(self):
         vm = MicrovmLifecycle()
         vm.run()
         vm.terminate()
+        vm.terminate_complete()
         assert vm.valid_transitions() == []
 
 
 class TestFullLifecyclePath:
     def test_full_cycle_with_resume(self):
-        """Test the full lifecycle: create -> run -> suspend -> resume -> terminate."""
+        """Full lifecycle: pending -> run -> suspend -> resume -> terminate."""
         vm = MicrovmLifecycle()
-        assert vm.state == "CREATING"
+        assert vm.state == "PENDING"
 
         vm.run()
         assert vm.state == "RUNNING"
 
-        vm.idle()
-        assert vm.state == "IDLE"
-
         vm.suspend()
+        assert vm.state == "SUSPENDING"
+
+        vm.suspend_complete()
         assert vm.state == "SUSPENDED"
 
         vm.resume()
         assert vm.state == "RUNNING"
 
-        vm.idle()
-        assert vm.state == "IDLE"
-
         vm.terminate()
+        assert vm.state == "TERMINATING"
+
+        vm.terminate_complete()
         assert vm.state == "TERMINATED"

@@ -1,5 +1,24 @@
 """
 Chapter 3 Challenge: MicroVM Lifecycle State Machine
+
+Model the real Lambda MicroVM lifecycle as reported by get-microvm. A MicroVM
+moves through these states, including the transient SUSPENDING/TERMINATING
+states the service passes through while running hooks:
+
+    PENDING --run--> RUNNING --suspend--> SUSPENDING --suspend_complete--> SUSPENDED
+                        ^                                                      |
+                        |------------------- resume ---------------------------|
+
+Valid transitions (see the state table in Chapter 3):
+
+    PENDING      --run-->                RUNNING
+    RUNNING      --suspend-->            SUSPENDING
+    RUNNING      --terminate-->          TERMINATING
+    SUSPENDING   --suspend_complete-->   SUSPENDED
+    SUSPENDED    --resume-->             RUNNING
+    SUSPENDED    --terminate-->          TERMINATING
+    TERMINATING  --terminate_complete--> TERMINATED
+    TERMINATED   (terminal state)
 """
 
 
@@ -15,10 +34,11 @@ class InvalidTransitionError(Exception):
 class MicrovmLifecycle:
     """Models the lifecycle state machine of a Lambda MicroVM."""
 
-    CREATING = "CREATING"
+    PENDING = "PENDING"
     RUNNING = "RUNNING"
-    IDLE = "IDLE"
+    SUSPENDING = "SUSPENDING"
     SUSPENDED = "SUSPENDED"
+    TERMINATING = "TERMINATING"
     TERMINATED = "TERMINATED"
 
     def __init__(self):
@@ -27,16 +47,19 @@ class MicrovmLifecycle:
     def run(self) -> None:
         raise NotImplementedError
 
-    def idle(self) -> None:
+    def suspend(self) -> None:
         raise NotImplementedError
 
-    def suspend(self) -> None:
+    def suspend_complete(self) -> None:
         raise NotImplementedError
 
     def resume(self) -> None:
         raise NotImplementedError
 
     def terminate(self) -> None:
+        raise NotImplementedError
+
+    def terminate_complete(self) -> None:
         raise NotImplementedError
 
     def valid_transitions(self) -> list[str]:

@@ -2,10 +2,13 @@
 """
 Chapter 3 - Lambda MicroVM Lifecycle Trace
 
-Simulates the full lifecycle of a Lambda MicroVM using mock AWS CLI commands.
-Each step prints the command that would be run and an illustrative response.
+Traces a MicroVM through its full lifecycle using the real AWS Lambda
+MicroVMs CLI commands. Each step prints the command that would be run and an
+illustrative response whose shape matches the actual API.
 
-This is a teaching tool - no real AWS calls are made.
+This is a teaching tool - no real AWS calls are made. To run these commands
+for real against your own account, see Chapters 4-6 and the README's
+"Following along with AWS" section.
 """
 
 import json
@@ -20,9 +23,21 @@ ACCOUNT_ID = sandbox_config.ACCOUNT_ID
 REGION = sandbox_config.REGION
 IMAGE_NAME = "agent-sandbox-v1"
 IMAGE_ARN = f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:microvm-image:{IMAGE_NAME}"
-MICROVM_ID = "mvm-0a1b2c3d4e5f67890"
-ENDPOINT_URL = f"https://{MICROVM_ID}.microvm.lambda.{REGION}.amazonaws.com"
-AUTH_TOKEN = "eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ.mock-jwe-token..."
+BASE_IMAGE_ARN = f"arn:aws:lambda:{REGION}:aws:microvm-image:al2023-1"
+BUILD_ROLE_ARN = f"arn:aws:iam::{ACCOUNT_ID}:role/MicroVMBuildRole"
+EXECUTION_ROLE_ARN = f"arn:aws:iam::{ACCOUNT_ID}:role/MicroVMExecutionRole"
+HTTP_INGRESS = f"arn:aws:lambda:{REGION}:aws:network-connector:aws-network-connector:HTTP_INGRESS"
+INTERNET_EGRESS = (
+    f"arn:aws:lambda:{REGION}:aws:network-connector:aws-network-connector:INTERNET_EGRESS"
+)
+
+MICROVM_ID = "microvm-0a1b2c3d-4e5f-6789-0abc-def012345678"
+ENDPOINT = f"5acf9c8f-6477-3ee3-3993-6ea1fee66713.lambda-microvm.{REGION}.on.aws"
+AUTH_TOKEN = "eyJraWQiOiJkMzQ3ZGQ5Ni1lZDM2LTQ1MzA...mock-jwe-token"
+
+# A MicroVM's maximum lifetime before automatic termination (8 hours),
+# reported by run-microvm/get-microvm as maximumDurationInSeconds.
+MAX_DURATION_SECONDS = 28800
 
 
 def separator():
@@ -47,6 +62,31 @@ def show_response(data):
     print()
 
 
+def show_no_response():
+    print("  Response: (empty body — this operation returns no content)\n")
+
+
+def microvm_state(state):
+    """The shape get-microvm / run-microvm return, with the given state."""
+    return {
+        "microvmId": MICROVM_ID,
+        "state": state,
+        "endpoint": ENDPOINT,
+        "imageArn": IMAGE_ARN,
+        "imageVersion": "1.0",
+        "executionRoleArn": EXECUTION_ROLE_ARN,
+        "idlePolicy": {
+            "maxIdleDurationSeconds": 300,
+            "suspendedDurationSeconds": 300,
+            "autoResumeEnabled": True,
+        },
+        "maximumDurationInSeconds": MAX_DURATION_SECONDS,
+        "startedAt": "2026-07-05T10:05:00Z",
+        "ingressNetworkConnectors": [HTTP_INGRESS],
+        "egressNetworkConnectors": [INTERNET_EGRESS],
+    }
+
+
 def main():
     print("Lambda MicroVM Lifecycle Trace")
     print("=" * 72)
@@ -54,167 +94,128 @@ def main():
     print("All responses are illustrative - no real AWS calls are made.")
     print(f"Timestamp: {datetime.now(UTC).isoformat()}")
 
-    # Step 1: Create Image
+    # Step 1: Create the image
     separator()
-    step(1, "Create a MicroVM image from Dockerfile + code artifact")
+    step(1, "Create a MicroVM image from a Dockerfile + code artifact")
     show_command(
         "aws lambda-microvms create-microvm-image \\\n"
-        "    --image-identifier agent-sandbox-v1 \\\n"
-        "    --dockerfile-uri s3://my-bucket/sandbox/Dockerfile \\\n"
-        "    --code-uri s3://my-bucket/sandbox/agent-code.tar.gz \\\n"
-        "    --base-image arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1"
+        f"    --name {IMAGE_NAME} \\\n"
+        "    --code-artifact uri=s3://my-bucket/app.zip \\\n"
+        f"    --base-image-arn {BASE_IMAGE_ARN} \\\n"
+        f"    --build-role-arn {BUILD_ROLE_ARN}"
     )
     show_response(
         {
-            "ImageArn": IMAGE_ARN,
-            "ImageName": IMAGE_NAME,
-            "Status": "BUILDING",
-            "CreatedAt": "2026-07-05T10:00:00Z",
-            "BaseImage": "arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1",
+            "imageArn": IMAGE_ARN,
+            "name": IMAGE_NAME,
+            "state": "CREATING",
+            "createdAt": "2026-07-05T10:00:00Z",
         }
     )
-    print("  Build logs stream to CloudWatch: /aws/lambda-microvms/agent-sandbox-v1")
-    print("  The service builds the Dockerfile, boots the image, and takes a snapshot.")
+    print(f"  Build logs stream to CloudWatch: /aws/lambda/microvms/{IMAGE_NAME}")
+    print("  The service runs your Dockerfile, boots the app, and snapshots it.")
 
-    # Step 2: Image ready
+    # Step 2: Image build completes
     separator()
     step(2, "Image build completes (snapshot created)")
-    show_command("aws lambda-microvms get-microvm-image --image-identifier agent-sandbox-v1")
+    show_command(f"aws lambda-microvms get-microvm-image --image-identifier {IMAGE_NAME}")
     show_response(
         {
-            "ImageArn": IMAGE_ARN,
-            "ImageName": IMAGE_NAME,
-            "Status": "READY",
-            "Architecture": "arm64",
-            "SnapshotSizeBytes": 2_147_483_648,
-            "CreatedAt": "2026-07-05T10:00:00Z",
-            "ReadyAt": "2026-07-05T10:03:42Z",
+            "imageArn": IMAGE_ARN,
+            "name": IMAGE_NAME,
+            "state": "CREATED",
+            "latestActiveImageVersion": "1.0",
+            "createdAt": "2026-07-05T10:00:00Z",
+            "updatedAt": "2026-07-05T10:03:42Z",
         }
     )
-    print("  The snapshot includes booted OS, installed packages, and code artifact.")
+    print("  The snapshot captures the booted OS, packages, and running app.")
     print("  Future launches restore from this snapshot instantly.")
 
-    # Step 3: Run MicroVM
+    # Step 3: Run a MicroVM from the image
     separator()
     step(3, "Run a MicroVM instance from the image")
     show_command(
         "aws lambda-microvms run-microvm \\\n"
-        f"    --image-arn {IMAGE_ARN} \\\n"
-        "    --vcpus 4 --memory-mb 8192 --disk-gb 16 \\\n"
-        '    --idle-policy \'{"maxIdleDurationSeconds":300,"autoResumeEnabled":true}\''
+        f"    --image-identifier {IMAGE_ARN} \\\n"
+        f"    --execution-role-arn {EXECUTION_ROLE_ARN} \\\n"
+        f'    --ingress-network-connectors "{HTTP_INGRESS}" \\\n'
+        f'    --egress-network-connectors "{INTERNET_EGRESS}" \\\n'
+        '    --idle-policy \'{"maxIdleDurationSeconds":300,'
+        '"suspendedDurationSeconds":300,"autoResumeEnabled":true}\''
     )
-    show_response(
-        {
-            "MicrovmId": MICROVM_ID,
-            "Status": "RUNNING",
-            "EndpointUrl": ENDPOINT_URL,
-            "AuthToken": AUTH_TOKEN,
-            "VCpus": 4,
-            "MemoryMb": 8192,
-            "DiskGb": 16,
-            "IdlePolicy": {
-                "maxIdleDurationSeconds": 300,
-                "autoResumeEnabled": True,
-            },
-            "LaunchedAt": "2026-07-05T10:05:00Z",
-        }
-    )
-    print("  The MicroVM is now running with a unique endpoint URL.")
-    print("  Use the AuthToken in the X-aws-proxy-auth header for all requests.")
+    show_response(microvm_state("PENDING"))
+    print("  Sizing (memory, vCPU) is fixed at image-creation time, not here.")
+    print("  The response has no auth token — you mint one separately (Step 5).")
 
-    # Step 4: Execute code
+    # Step 4: Wait for RUNNING
     separator()
-    step(4, "Execute code inside the MicroVM via HTTP")
+    step(4, "Poll until the MicroVM reaches RUNNING")
+    show_command(f"aws lambda-microvms get-microvm --microvm-identifier {MICROVM_ID}")
+    show_response(microvm_state("RUNNING"))
+    print("  Snapshots skip the boot sequence, so RUNNING arrives in seconds.")
+
+    # Step 5: Mint a token and call the app
+    separator()
+    step(5, "Create an auth token and call the application over HTTPS")
     show_command(
-        f"curl -X POST \\\n"
+        "aws lambda-microvms create-microvm-auth-token \\\n"
+        f"    --microvm-identifier {MICROVM_ID} \\\n"
+        "    --expiration-in-minutes 15 \\\n"
+        "    --allowed-ports '[{\"port\":8080}]'"
+    )
+    show_response({"authToken": {"X-aws-proxy-auth": AUTH_TOKEN}})
+    print("  /health below is your application's own route, not an AWS API.")
+    show_command(
+        "curl \\\n"
         f'    -H "X-aws-proxy-auth: {AUTH_TOKEN[:30]}..." \\\n'
-        f'    -H "Content-Type: application/json" \\\n'
-        f'    -d \'{{"command": "python -c \\"import pandas; print(pandas.__version__)\\"}}\' \\\n'
-        f"    {ENDPOINT_URL}/exec"
+        f"    https://{ENDPOINT}/health"
     )
-    show_response(
-        {
-            "exitCode": 0,
-            "stdout": "2.2.1\n",
-            "stderr": "",
-            "durationMs": 342,
-        }
-    )
-    print("  The MicroVM executed the command and returned results.")
-    print("  State (installed packages, files) persists for future requests.")
+    show_response({"status": "ok"})
+    print("  Requests carry the token in the X-aws-proxy-auth header.")
 
-    # Step 5: Idle and suspend
+    # Step 6: Idle and auto-suspend
     separator()
-    step(5, "MicroVM goes idle, then suspends automatically")
-    print("  After 300 seconds with no requests, the idle policy triggers suspension.")
+    step(6, "MicroVM goes idle, then suspends automatically")
+    print("  After 300s with no requests, the idle policy triggers suspension.")
     print()
     show_command(f"aws lambda-microvms get-microvm --microvm-identifier {MICROVM_ID}")
-    show_response(
-        {
-            "MicrovmId": MICROVM_ID,
-            "Status": "SUSPENDED",
-            "SuspendedAt": "2026-07-05T10:10:00Z",
-            "EndpointUrl": ENDPOINT_URL,
-            "Note": "No compute charges while suspended. State is preserved.",
-        }
-    )
-    print("  Memory, disk, and processes are frozen. No compute billing.")
+    show_response(microvm_state("SUSPENDED"))
+    print("  Memory and disk are frozen and preserved. No compute billing.")
 
-    # Step 6: Resume
+    # Step 7: Resume
     separator()
-    step(6, "Resume the MicroVM (explicit or automatic on next request)")
+    step(7, "Resume the MicroVM (explicit, or automatic on the next request)")
     show_command(f"aws lambda-microvms resume-microvm --microvm-identifier {MICROVM_ID}")
-    show_response(
-        {
-            "MicrovmId": MICROVM_ID,
-            "Status": "RUNNING",
-            "ResumedAt": "2026-07-05T11:30:00Z",
-            "EndpointUrl": ENDPOINT_URL,
-            "Note": "All state restored - memory, disk, running processes.",
-        }
-    )
-    print("  The VM picks up exactly where it left off.")
-    print("  With autoResumeEnabled, this happens transparently on the next HTTP request.")
-
-    # Step 7: Refresh auth token
-    separator()
-    step(7, "Refresh authentication token (tokens are short-lived)")
-    show_command(f"aws lambda-microvms create-microvm-auth-token --microvm-identifier {MICROVM_ID}")
-    show_response(
-        {
-            "MicrovmId": MICROVM_ID,
-            "AuthToken": "eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ.new-token...",
-            "ExpiresAt": "2026-07-05T12:30:00Z",
-        }
-    )
-    print("  Use the new token in subsequent X-aws-proxy-auth headers.")
+    show_no_response()
+    print("  resume-microvm returns no body; poll get-microvm to confirm RUNNING.")
+    show_command(f"aws lambda-microvms get-microvm --microvm-identifier {MICROVM_ID}")
+    show_response(microvm_state("RUNNING"))
+    print("  State is restored exactly — memory, disk, and running processes.")
+    print("  With autoResumeEnabled, this happens transparently on the next request.")
 
     # Step 8: Terminate
     separator()
     step(8, "Terminate the MicroVM when the session is complete")
     show_command(f"aws lambda-microvms terminate-microvm --microvm-identifier {MICROVM_ID}")
-    show_response(
-        {
-            "MicrovmId": MICROVM_ID,
-            "Status": "TERMINATED",
-            "TerminatedAt": "2026-07-05T12:35:00Z",
-        }
-    )
-    print("  The MicroVM is permanently stopped. All state is discarded.")
-    print("  To start a new session, call RunMicrovm again from the same image.")
+    show_no_response()
+    print("  terminate-microvm returns no body; a follow-up get-microvm shows:")
+    show_response(microvm_state("TERMINATED") | {"terminatedAt": "2026-07-05T12:35:00Z"})
+    print("  The MicroVM is permanently stopped and all state is discarded.")
 
     separator()
     print("LIFECYCLE SUMMARY")
     print()
-    print("  CREATING --> RUNNING --> IDLE --> SUSPENDED --> RUNNING --> TERMINATED")
-    print("    (build)    (active)   (quiet)   (frozen)     (resumed)   (done)")
+    print("  Image:   CREATING --> CREATED")
+    print("  MicroVM: PENDING --> RUNNING --> SUSPENDED --> RUNNING --> TERMINATED")
+    print("            (launch)   (active)    (frozen)      (resumed)   (done)")
     print()
     print("Key takeaways:")
     print("  - Snapshots enable instant launch (no boot sequence)")
     print("  - State persists across suspend/resume cycles")
     print("  - Suspended VMs cost nothing in compute")
     print("  - Each VM gets a unique endpoint + short-lived JWE token")
-    print("  - Max runtime: 8 hours | Max: 16 vCPUs, 32 GB RAM, 32 GB disk")
+    print("  - Maximum lifetime is 8 hours (maximumDurationInSeconds: 28800)")
     print()
 
 

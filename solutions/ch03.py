@@ -15,23 +15,25 @@ class InvalidTransitionError(Exception):
 class MicrovmLifecycle:
     """Models the lifecycle state machine of a Lambda MicroVM."""
 
-    CREATING = "CREATING"
+    PENDING = "PENDING"
     RUNNING = "RUNNING"
-    IDLE = "IDLE"
+    SUSPENDING = "SUSPENDING"
     SUSPENDED = "SUSPENDED"
+    TERMINATING = "TERMINATING"
     TERMINATED = "TERMINATED"
 
     # Transition table: state -> {action: next_state}
     _TRANSITIONS = {
-        "CREATING": {"run": "RUNNING"},
-        "RUNNING": {"idle": "IDLE", "terminate": "TERMINATED"},
-        "IDLE": {"suspend": "SUSPENDED", "terminate": "TERMINATED"},
-        "SUSPENDED": {"resume": "RUNNING", "terminate": "TERMINATED"},
+        "PENDING": {"run": "RUNNING"},
+        "RUNNING": {"suspend": "SUSPENDING", "terminate": "TERMINATING"},
+        "SUSPENDING": {"suspend_complete": "SUSPENDED"},
+        "SUSPENDED": {"resume": "RUNNING", "terminate": "TERMINATING"},
+        "TERMINATING": {"terminate_complete": "TERMINATED"},
         "TERMINATED": {},
     }
 
     def __init__(self):
-        self.state = self.CREATING
+        self.state = self.PENDING
 
     def _transition(self, action: str) -> None:
         allowed = self._TRANSITIONS.get(self.state, {})
@@ -42,17 +44,20 @@ class MicrovmLifecycle:
     def run(self) -> None:
         self._transition("run")
 
-    def idle(self) -> None:
-        self._transition("idle")
-
     def suspend(self) -> None:
         self._transition("suspend")
+
+    def suspend_complete(self) -> None:
+        self._transition("suspend_complete")
 
     def resume(self) -> None:
         self._transition("resume")
 
     def terminate(self) -> None:
         self._transition("terminate")
+
+    def terminate_complete(self) -> None:
+        self._transition("terminate_complete")
 
     def valid_transitions(self) -> list[str]:
         return list(self._TRANSITIONS.get(self.state, {}).keys())

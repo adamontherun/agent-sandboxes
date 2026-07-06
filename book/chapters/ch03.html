@@ -147,9 +147,11 @@
 
       <p>A Lambda MicroVM moves through the following states:</p>
 
-      <pre><code class="language-text">CREATING ──▶ RUNNING ──▶ IDLE ──▶ SUSPENDED ──▶ TERMINATED
-                ▲                      │
-                └──────── RESUMED ◀────┘</code></pre>
+      <pre><code class="language-text">PENDING ──▶ RUNNING ──▶ SUSPENDING ──▶ SUSPENDED ──▶ TERMINATING ──▶ TERMINATED
+               ▲                            │
+               └────────── resume ◀─────────┘</code></pre>
+
+      <p>Idle is a <em>condition</em>, not a state: when a MicroVM sits idle past <code>maxIdleDurationSeconds</code>, the service moves it from RUNNING through the transient SUSPENDING state to SUSPENDED. Likewise, termination passes through TERMINATING while the <code>/terminate</code> hook runs.</p>
 
       <p>Here is what drives each transition:</p>
 
@@ -158,11 +160,13 @@
           <tr><th>Transition</th><th>Trigger</th><th>API Operation</th></tr>
         </thead>
         <tbody>
-          <tr><td>CREATING &#8594; RUNNING</td><td>Image snapshot ready, VM booted</td><td><code>RunMicrovm</code></td></tr>
-          <tr><td>RUNNING &#8594; IDLE</td><td>No incoming requests for a period</td><td>Automatic (idle detection)</td></tr>
-          <tr><td>IDLE &#8594; SUSPENDED</td><td>Idle duration exceeds <code>maxIdleDurationSeconds</code></td><td>Automatic, or <code>SuspendMicrovm</code></td></tr>
-          <tr><td>SUSPENDED &#8594; RUNNING</td><td>New request arrives (if <code>autoResumeEnabled</code>)</td><td>Automatic, or <code>ResumeMicrovm</code></td></tr>
-          <tr><td>Any &#8594; TERMINATED</td><td>Explicit termination or max runtime reached</td><td><code>TerminateMicrovm</code></td></tr>
+          <tr><td>PENDING &#8594; RUNNING</td><td>Provisioning complete, <code>/run</code> hook succeeded</td><td><code>RunMicrovm</code></td></tr>
+          <tr><td>RUNNING &#8594; SUSPENDING</td><td>Idle duration exceeds <code>maxIdleDurationSeconds</code>, or explicit call</td><td>Automatic, or <code>SuspendMicrovm</code></td></tr>
+          <tr><td>SUSPENDING &#8594; SUSPENDED</td><td><code>/suspend</code> hook completed, memory and disk checkpointed</td><td>Internal</td></tr>
+          <tr><td>SUSPENDED &#8594; RUNNING</td><td>Traffic arrives (if <code>autoResumeEnabled</code>), or explicit call</td><td>Automatic, or <code>ResumeMicrovm</code></td></tr>
+          <tr><td>RUNNING &#8594; TERMINATING</td><td>Explicit call, or <code>maximumDurationInSeconds</code> exceeded</td><td><code>TerminateMicrovm</code></td></tr>
+          <tr><td>SUSPENDED &#8594; TERMINATING</td><td><code>suspendedDurationSeconds</code> exceeded, or explicit call</td><td><code>TerminateMicrovm</code></td></tr>
+          <tr><td>TERMINATING &#8594; TERMINATED</td><td><code>/terminate</code> hook completed, resources released</td><td>Internal</td></tr>
         </tbody>
       </table>
 
@@ -188,12 +192,15 @@
       <p>All subsequent requests to the MicroVM must include the token in the <code>X-aws-proxy-auth</code> header. Tokens are short-lived; you obtain fresh ones via <code>CreateMicrovmAuthToken</code>.</p>
 
       <pre><code class="language-bash"># Obtain a fresh auth token for an existing MicroVM
-aws lambda create-microvm-auth-token \
-  --microvm-id mvm-0a1b2c3d4e5f67890
+aws lambda-microvms create-microvm-auth-token \
+  --microvm-identifier microvm-0a1b2c3d-4e5f-6789-0abc-def012345678 \
+  --expiration-in-minutes 15 \
+  --allowed-ports '[{"port":8080}]'
+# Response: { "authToken": { "X-aws-proxy-auth": "eyJraWQiOi..." } }
 
-# Use the token to make requests to the MicroVM endpoint
+# Use the token to make requests to the MicroVM's own endpoint
 curl -H "X-aws-proxy-auth: $TOKEN" \
-  https://mvm-0a1b2c3d4e5f67890.microvm.lambda.us-east-1.amazonaws.com/exec</code></pre>
+  https://5acf9c8f-6477-3ee3-3993-6ea1fee66713.lambda-microvm.us-east-1.on.aws/exec</code></pre>
 
       <p>This auth model means each MicroVM is its own isolated endpoint. There is no shared gateway or multiplexed connection. An agent framework obtains the endpoint URL and token at launch time, then communicates directly with its sandbox. If the token expires mid-session, the framework calls <code>CreateMicrovmAuthToken</code> to get a new one without restarting the VM.</p>
 
@@ -225,36 +232,42 @@ curl -H "X-aws-proxy-auth: $TOKEN" \
       <p>The following sequence shows the complete lifecycle using AWS CLI commands. Each step includes the command you would run and a summary of the response. (See <code>examples/ch03_lifecycle_trace.py</code> for a runnable script that prints this trace.)</p>
 
       <pre><code class="language-bash"># Step 1: Create an image from a Dockerfile + S3 code artifact
-aws lambda create-microvm-image \
-  --image-name agent-sandbox-v1 \
-  --dockerfile-uri s3://my-bucket/sandbox/Dockerfile \
-  --code-uri s3://my-bucket/sandbox/agent-code.tar.gz \
-  --base-image arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1
-# Response: ImageArn, Status: BUILDING
+aws lambda-microvms create-microvm-image \
+  --name agent-sandbox-v1 \
+  --code-artifact uri=s3://my-bucket/app.zip \
+  --base-image-arn arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1 \
+  --build-role-arn arn:aws:iam::123456789012:role/MicroVMBuildRole
+# Response: imageArn, name, state: CREATING (poll get-microvm-image until CREATED)
 
 # Step 2: Run a MicroVM from the image
-aws lambda run-microvm \
-  --image-arn arn:aws:lambda:us-east-1:123456789012:microvm-image:agent-sandbox-v1 \
-  --vcpus 4 --memory-mb 8192 --disk-gb 16 \
-  --idle-policy '{"maxIdleDurationSeconds":300,"autoResumeEnabled":true}'
-# Response: MicrovmId, EndpointUrl, AuthToken, Status: RUNNING
+aws lambda-microvms run-microvm \
+  --image-identifier arn:aws:lambda:us-east-1:123456789012:microvm-image:agent-sandbox-v1 \
+  --execution-role-arn arn:aws:iam::123456789012:role/MicroVMExecutionRole \
+  --ingress-network-connectors "arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:HTTP_INGRESS" \
+  --egress-network-connectors "arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:INTERNET_EGRESS" \
+  --idle-policy '{"maxIdleDurationSeconds":300,"suspendedDurationSeconds":300,"autoResumeEnabled":true}'
+# Response: microvmId, endpoint, state: PENDING (no auth token — mint one below)
 
-# Step 3: Use the MicroVM (direct HTTP)
+# Step 3: Mint an auth token, then use the MicroVM (direct HTTP)
+aws lambda-microvms create-microvm-auth-token \
+  --microvm-identifier microvm-abc123 \
+  --expiration-in-minutes 15 \
+  --allowed-ports '[{"port":8080}]'
 curl -X POST \
   -H "X-aws-proxy-auth: eyJhbGciOi..." \
   -H "Content-Type: application/json" \
   -d '{"command": "pip install pandas && python analysis.py"}' \
-  https://mvm-abc123.microvm.lambda.us-east-1.amazonaws.com/exec
+  https://5acf9c8f-6477-3ee3-3993-6ea1fee66713.lambda-microvm.us-east-1.on.aws/exec
 
 # Step 4: VM goes idle after 300s of no requests, then suspends automatically
 
 # Step 5: Resume (automatic on next request, or explicit)
-aws lambda resume-microvm --microvm-id mvm-abc123
-# Response: Status: RUNNING (state fully restored)
+aws lambda-microvms resume-microvm --microvm-identifier microvm-abc123
+# Returns no body; poll get-microvm to confirm state: RUNNING
 
 # Step 6: Terminate when done
-aws lambda terminate-microvm --microvm-id mvm-abc123
-# Response: Status: TERMINATED</code></pre>
+aws lambda-microvms terminate-microvm --microvm-identifier microvm-abc123
+# Returns no body; a follow-up get-microvm shows state: TERMINATED</code></pre>
 
       <!-- Section 7 -->
       <h2 id="challenge">7. Challenge: Design a Lifecycle State Machine</h2>
@@ -262,19 +275,20 @@ aws lambda terminate-microvm --microvm-id mvm-abc123
       <p>Your task: implement a <code>MicrovmLifecycle</code> class that models the state machine described in this chapter. The class should:</p>
 
       <ul>
-        <li>Track the current state (CREATING, RUNNING, IDLE, SUSPENDED, TERMINATED).</li>
-        <li>Expose transition methods: <code>run()</code>, <code>idle()</code>, <code>suspend()</code>, <code>resume()</code>, <code>terminate()</code>.</li>
+        <li>Track the current state (PENDING, RUNNING, SUSPENDING, SUSPENDED, TERMINATING, TERMINATED).</li>
+        <li>Expose transition methods: <code>run()</code>, <code>suspend()</code>, <code>suspend_complete()</code>, <code>resume()</code>, <code>terminate()</code>, <code>terminate_complete()</code>. The <code>*_complete()</code> methods model the service finishing the <code>/suspend</code> and <code>/terminate</code> hooks that carry a MicroVM through its transient states.</li>
         <li>Raise <code>InvalidTransitionError</code> when a transition is not allowed from the current state.</li>
         <li>Provide <code>valid_transitions()</code> returning the list of actions available from the current state.</li>
       </ul>
 
       <p>The skeleton is in <code>challenges/ch03.py</code>. Tests are in <code>challenges/ch03_test.py</code>. A reference solution is in <code>solutions/ch03.py</code>.</p>
 
-      <p>Think carefully about which transitions are legal. For example: can you <code>resume()</code> from RUNNING? Can you <code>terminate()</code> from any state? Refer to the lifecycle diagram above.</p>
+      <p>Think carefully about which transitions are legal. For example: can you <code>resume()</code> from RUNNING? Can you <code>terminate()</code> from PENDING, or only once the MicroVM is RUNNING or SUSPENDED? Refer to the state-transition table above.</p>
 
       <hr>
-      <nav class="chapter-nav" aria-label="Previous and next chapters">
-        <a href="ch02.html">&larr; Chapter 2: Understanding Firecracker MicroVMs</a>
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch02.html">Chapter 2: Understanding Firecracker MicroVMs</a>
+        <a class="next" href="ch04.html">Chapter 4: Your First MicroVM Image</a>
       </nav>
     </article>
   </main>
