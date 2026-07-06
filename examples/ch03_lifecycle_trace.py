@@ -112,7 +112,7 @@ def main():
             "createdAt": "2026-07-05T10:00:00Z",
         }
     )
-    print(f"  Build logs stream to CloudWatch: /aws/lambda/microvms/{IMAGE_NAME}")
+    print(f"  Build logs stream to CloudWatch: /aws/lambda-microvms/{IMAGE_NAME}")
     print("  The service runs your Dockerfile, boots the app, and snapshots it.")
 
     # Step 2: Image build completes

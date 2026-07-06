@@ -97,7 +97,7 @@
       <section id="sizing">
         <h2>Sizing the MicroVM</h2>
 
-        <p>CPU and memory are set on the <em>image</em>, not the launch call, and stay fixed for the lifetime of any MicroVM launched from it. You cannot resize a running instance; if you need more, you build a differently-sized image and launch from that instead. The current documented ceilings are <strong>16 vCPUs</strong> and <strong>32 GB of memory</strong> per MicroVM, with the smallest useful configurations starting at a fraction of a vCPU and 128 MB.</p>
+        <p>Memory is set on the <em>image</em> via <code>--resources</code>, not the launch call, and stays fixed for the lifetime of any MicroVM launched from it. You cannot resize a running instance; if you need more, you build a differently-sized image and launch from that instead. You don't set a vCPU count directly &mdash; vCPU scales with memory at roughly <strong>1 vCPU per 2 GB</strong> (an 8 GB image gets about 4 vCPUs). The documented ceilings are <strong>32 GB of memory</strong> and, at that ratio, <strong>16 vCPUs</strong> per MicroVM.</p>
 
         <figure class="codeblock">
           <figcaption class="code-label">Set sizing at image-build time, launch from the sized image</figcaption>
@@ -107,7 +107,7 @@ aws lambda-microvms create-microvm-image \
   --base-image-arn arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1 \
   --build-role-arn arn:aws:iam::&lt;your-account-id&gt;:role/&lt;build-role&gt; \
   --code-artifact uri=s3://&lt;your-bucket&gt;/coding-agent.zip \
-  --resources '{"vcpuCount":4,"memorySizeInMb":8192}'
+  --resources '[{"minimumMemoryInMiB":8192}]'   # 8 GB -&gt; ~4 vCPUs
 
 # Launch just references the already-sized image
 aws lambda-microvms run-microvm \
@@ -116,7 +116,7 @@ aws lambda-microvms run-microvm \
   --idle-policy '{"maxIdleDurationSeconds":300,"suspendedDurationSeconds":300,"autoResumeEnabled":true}'</code></pre>
         </figure>
 
-        <p>Pick the smallest size that fits your workload's steady state. Agents running Python and shelling out to <code>gcc</code> or <code>node</code> spend most of their time waiting on I/O, so 2 vCPUs and 2&ndash;4 GB is often plenty. Machine-learning inference or heavy compilation is where the upper end starts to matter. If your workload's needs change, that's a new image build, not a flag on an existing one.</p>
+        <p>Pick the smallest size that fits your workload's steady state. Agents running Python and shelling out to <code>gcc</code> or <code>node</code> spend most of their time waiting on I/O, so 4&ndash;8 GB (roughly 2&ndash;4 vCPUs) is often plenty. Machine-learning inference or heavy compilation is where the upper end starts to matter. If your workload's needs change, that's a new image build, not a flag on an existing one.</p>
 
         <p>All three <code>idlePolicy</code> fields shown above are required together when launching &mdash; Chapter 5 covers why omitting any one of them fails validation.</p>
       </section>

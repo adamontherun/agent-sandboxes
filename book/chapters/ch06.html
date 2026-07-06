@@ -203,7 +203,7 @@ aws lambda-microvms get-microvm \
 # (no output on success)</code></pre>
         </figure>
 
-        <p>After termination, the instance remains in <code>ListMicrovms</code> with <code>state: TERMINATED</code> but only retains minimal metadata. The endpoint URL, idle policy, and network connector fields are absent from terminated entries:</p>
+        <p>After termination, the instance remains in <code>ListMicrovms</code> with <code>state: TERMINATED</code> but only retains minimal metadata. The endpoint URL, execution role, idle policy, and network connector fields are absent from terminated entries:</p>
 
         <figure class="codeblock">
           <figcaption class="code-label">Terminated instance in ListMicrovms (real output)</figcaption>
@@ -212,7 +212,6 @@ aws lambda-microvms get-microvm \
     "state": "TERMINATED",
     "imageArn": "arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:lambda-microvms-poc-hello-world",
     "imageVersion": "11.0",
-    "executionRoleArn": "arn:aws:iam::&lt;your-account-id&gt;:role/MicroVMLambdaPOCRole",
     "startedAt": "2026-07-05T21:43:41.138000-10:00"
 }</code></pre>
         </figure>

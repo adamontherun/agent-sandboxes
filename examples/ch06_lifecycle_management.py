@@ -13,8 +13,9 @@ Real output captured from a live run (account ID redacted):
       - After terminate-microvm: state=TERMINATED
 
     Terminated instances in ListMicrovms retain only:
-      microvmId, state, imageArn, imageVersion, startedAt, executionRoleArn
-    Fields like endpoint, idlePolicy, and networkConnectors are absent.
+      microvmId, state, imageArn, imageVersion, startedAt
+    Fields like endpoint, executionRoleArn, idlePolicy, and
+    networkConnectors are absent from the list view.
 """
 
 import json
