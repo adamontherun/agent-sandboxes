@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      # A challenge suite whose tests pass against the untouched skeleton
+      # isn't testing anything, so CI asserts BOTH directions.
+      - name: Skeletons must still fail (they're unfinished by design)
+        run: |
+          if pytest challenges/ -q; then
+            echo "::error::challenges passed against the untouched skeletons — a challenge test isn't testing anything"
+            exit 1
+          fi
+
+      - name: Reference solutions must pass every challenge test
+        run: COURSE_SOLUTIONS=1 pytest challenges/ -q
+
+  devcontainer-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the devcontainer and run a real example inside it
+        uses: devcontainers/ci@v0.3
+        with:
+          imageName: ghcr.io/${{ github.repository }}-devcontainer
+          push: never
+          runCmd: |
+            set -e
+            python examples/ch16_malware_analysis_pipeline.py
+            COURSE_SOLUTIONS=1 pytest challenges/ -q

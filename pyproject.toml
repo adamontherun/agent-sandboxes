@@ -15,6 +15,13 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The course code lives as loose scripts under examples/, challenges/, and
+# solutions/ — there is no importable package. This installs the runtime
+# dependencies (so `pip install -e .` works) without trying to ship a
+# package that doesn't exist.
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

@@ -8,21 +8,21 @@
 <meta name="keywords" content="AWS Lambda, MicroVMs, Firecracker, agent sandbox, code execution, isolation, security, AI agents, Python">
 <meta name="author" content="Claude Code Course Builder">
 <meta name="robots" content="index, follow">
-<link rel="canonical" href="{{PAGES_URL}}">
+<link rel="canonical" href="https://adamontherun.github.io/agent-sandboxes/">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
 <meta property="og:title" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
 <meta property="og:description" content="Learn to safely execute untrusted code in isolated environments using AWS Lambda MicroVMs and Firecracker for AI agents, security testing, and multi-tenant applications.">
-<meta property="og:url" content="{{PAGES_URL}}">
-<meta property="og:image" content="{{OG_IMAGE_URL}}">
-<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
-<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta property="og:url" content="https://adamontherun.github.io/agent-sandboxes/">
+<meta property="og:image" content="https://adamontherun.github.io/agent-sandboxes/assets/screenshots/homepage.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="776">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
 <meta name="twitter:description" content="Learn to safely execute untrusted code in isolated environments using AWS Lambda MicroVMs and Firecracker for AI agents, security testing, and multi-tenant applications.">
-<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="twitter:image" content="https://adamontherun.github.io/agent-sandboxes/assets/screenshots/homepage.png">
 <meta name="theme-color" content="#c0392b">
 <script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
 <link rel="stylesheet" href="assets/style.css">
@@ -32,12 +32,29 @@
   "@type": "Course",
   "name": "Building Agent Sandboxes with AWS Lambda MicroVMs",
   "description": "Learn to safely execute untrusted code in isolated environments using AWS Lambda MicroVMs and Firecracker for AI agents, security testing, and multi-tenant applications.",
-  "url": "{{PAGES_URL}}",
-  "image": "{{OG_IMAGE_URL}}",
+  "url": "https://adamontherun.github.io/agent-sandboxes/",
+  "image": "https://adamontherun.github.io/agent-sandboxes/assets/screenshots/homepage.png",
   "provider": {"@type": "Person", "name": "Claude Code Course Builder", "url": "https://claude.ai/code"},
   "isAccessibleForFree": true,
   "inLanguage": "en",
-  "hasPart": []
+  "hasPart": [
+    {"@type": "Chapter", "position": 1, "name": "Why Agent Sandboxes Matter", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch01.html"},
+    {"@type": "Chapter", "position": 2, "name": "Understanding Firecracker MicroVMs", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch02.html"},
+    {"@type": "Chapter", "position": 3, "name": "Lambda MicroVMs Architecture", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch03.html"},
+    {"@type": "Chapter", "position": 4, "name": "Your First MicroVM Image", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch04.html"},
+    {"@type": "Chapter", "position": 5, "name": "Launching and Connecting", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch05.html"},
+    {"@type": "Chapter", "position": 6, "name": "Lifecycle Management", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch06.html"},
+    {"@type": "Chapter", "position": 7, "name": "Executing Untrusted Code", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch07.html"},
+    {"@type": "Chapter", "position": 8, "name": "Package Management and Dependencies", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch08.html"},
+    {"@type": "Chapter", "position": 9, "name": "File System Isolation", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch09.html"},
+    {"@type": "Chapter", "position": 10, "name": "Resource Limits and Quotas", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch10.html"},
+    {"@type": "Chapter", "position": 11, "name": "Multi-Tenant Isolation", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch11.html"},
+    {"@type": "Chapter", "position": 12, "name": "Security Hardening", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch12.html"},
+    {"@type": "Chapter", "position": 13, "name": "Observability and Debugging", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch13.html"},
+    {"@type": "Chapter", "position": 14, "name": "Production Patterns", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch14.html"},
+    {"@type": "Chapter", "position": 15, "name": "AI Coding Assistant Pattern", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch15.html"},
+    {"@type": "Chapter", "position": 16, "name": "Security Testing Sandbox", "url": "https://adamontherun.github.io/agent-sandboxes/chapters/ch16.html"}
+  ]
 }
 </script>
 </head>
@@ -49,8 +66,8 @@
     <p class="tagline">AWS Lambda MicroVMs in production</p>
 
     <div class="sidebar-links">
-      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
-      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+      <a class="codespace-link" href="https://codespaces.new/adamontherun/agent-sandboxes" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="https://github.com/adamontherun/agent-sandboxes" target="_blank" rel="noopener">GitHub repo &#8599;</a>
     </div>
 
     <nav aria-label="Chapters">
@@ -100,9 +117,9 @@
         Learn how to safely execute untrusted code in isolated VM-level environments using AWS Lambda MicroVMs and Firecracker. This course walks you through building production-ready agent sandboxes for AI coding assistants, security testing, and multi-tenant applications—with runnable Python examples, failing-test challenges, and inline citations to official AWS and Firecracker documentation.
       </p>
       <p>
-        Click <a href="{{CODESPACES_URL}}" target="_blank" rel="noopener"><strong>Launch Codespace</strong></a>
+        Click <a href="https://codespaces.new/adamontherun/agent-sandboxes" target="_blank" rel="noopener"><strong>Launch Codespace</strong></a>
         in the sidebar for a ready-to-go environment with Python and the AWS CLI already configured, or clone the
-        <a href="{{REPO_URL}}" target="_blank" rel="noopener">repo</a> and run
+        <a href="https://github.com/adamontherun/agent-sandboxes" target="_blank" rel="noopener">repo</a> and run
         <code>pip install -e .</code> locally.
       </p>
 

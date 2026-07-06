@@ -1,0 +1,29 @@
+# Building Agent Sandboxes with AWS Lambda MicroVMs
+
+> A hands-on course on safely executing untrusted code in isolated VM-level environments using AWS Lambda MicroVMs and Firecracker, for AI coding assistants, security testing, and multi-tenant applications.
+
+## Part I: Foundations
+- [Chapter 1: Why Agent Sandboxes Matter](https://adamontherun.github.io/agent-sandboxes/chapters/ch01.html)
+- [Chapter 2: Understanding Firecracker MicroVMs](https://adamontherun.github.io/agent-sandboxes/chapters/ch02.html)
+- [Chapter 3: Lambda MicroVMs Architecture](https://adamontherun.github.io/agent-sandboxes/chapters/ch03.html)
+
+## Part II: Getting Started
+- [Chapter 4: Your First MicroVM Image](https://adamontherun.github.io/agent-sandboxes/chapters/ch04.html)
+- [Chapter 5: Launching and Connecting](https://adamontherun.github.io/agent-sandboxes/chapters/ch05.html)
+- [Chapter 6: Lifecycle Management](https://adamontherun.github.io/agent-sandboxes/chapters/ch06.html)
+
+## Part III: Building an Agent Sandbox
+- [Chapter 7: Executing Untrusted Code](https://adamontherun.github.io/agent-sandboxes/chapters/ch07.html)
+- [Chapter 8: Package Management and Dependencies](https://adamontherun.github.io/agent-sandboxes/chapters/ch08.html)
+- [Chapter 9: File System Isolation](https://adamontherun.github.io/agent-sandboxes/chapters/ch09.html)
+- [Chapter 10: Resource Limits and Quotas](https://adamontherun.github.io/agent-sandboxes/chapters/ch10.html)
+
+## Part IV: Advanced Patterns
+- [Chapter 11: Multi-Tenant Isolation](https://adamontherun.github.io/agent-sandboxes/chapters/ch11.html)
+- [Chapter 12: Security Hardening](https://adamontherun.github.io/agent-sandboxes/chapters/ch12.html)
+- [Chapter 13: Observability and Debugging](https://adamontherun.github.io/agent-sandboxes/chapters/ch13.html)
+- [Chapter 14: Production Patterns](https://adamontherun.github.io/agent-sandboxes/chapters/ch14.html)
+
+## Part V: Real-World Systems
+- [Chapter 15: AI Coding Assistant Pattern](https://adamontherun.github.io/agent-sandboxes/chapters/ch15.html)
+- [Chapter 16: Security Testing Sandbox](https://adamontherun.github.io/agent-sandboxes/chapters/ch16.html)
