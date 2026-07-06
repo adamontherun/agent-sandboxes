@@ -122,7 +122,7 @@ CMD ["python3", "agent.py"]</code></pre>
 
         <aside class="callout gotcha">
           <span class="callout-title">&#9888; Gotcha</span>
-          <p>Suspend and resume preserve the packages. <em>Termination</em> does not. If a MicroVM is terminated (out of TTL, out of memory, or by explicit <code>DeleteMicrovm</code>), everything you installed at runtime is gone. The next launch from the same image starts clean. Do not assume runtime installs are durable across the MicroVM's lifetime unless you understand who controls termination.</p>
+          <p>Suspend and resume preserve the packages. <em>Termination</em> does not. If a MicroVM is terminated (out of TTL, out of memory, or by explicit <code>TerminateMicrovm</code>), everything you installed at runtime is gone. The next launch from the same image starts clean. Do not assume runtime installs are durable across the MicroVM's lifetime unless you understand who controls termination.</p>
         </aside>
       </section>
 

@@ -85,21 +85,28 @@
       <section id="sizing">
         <h2>Sizing the MicroVM</h2>
 
-        <p>CPU and memory are set when you launch a MicroVM and stay fixed for its lifetime. You cannot resize a running instance; if you need more, you launch a bigger one. The current documented ceilings are <strong>16 vCPUs</strong> and <strong>32 GB of memory</strong> per MicroVM, with the smallest useful configurations starting at a fraction of a vCPU and 128 MB.</p>
+        <p>CPU and memory are set on the <em>image</em>, not the launch call, and stay fixed for the lifetime of any MicroVM launched from it. You cannot resize a running instance; if you need more, you build a differently-sized image and launch from that instead. The current documented ceilings are <strong>16 vCPUs</strong> and <strong>32 GB of memory</strong> per MicroVM, with the smallest useful configurations starting at a fraction of a vCPU and 128 MB.</p>
 
         <figure class="codeblock">
-          <figcaption class="code-label">Launch with explicit sizing</figcaption>
-          <pre><code class="language-bash">aws lambda-microvms create-microvm \
-  --image-arn arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:coding-agent \
+          <figcaption class="code-label">Set sizing at image-build time, launch from the sized image</figcaption>
+          <pre><code class="language-bash"># Sizing is a --resources argument on the image build (Chapter 4), not on launch
+aws lambda-microvms create-microvm-image \
+  --name coding-agent \
+  --base-image-arn arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1 \
+  --build-role-arn arn:aws:iam::&lt;your-account-id&gt;:role/&lt;build-role&gt; \
+  --code-artifact uri=s3://&lt;your-bucket&gt;/coding-agent.zip \
+  --resources '{"vcpuCount":4,"memorySizeInMb":8192}'
+
+# Launch just references the already-sized image
+aws lambda-microvms run-microvm \
+  --image-identifier arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:coding-agent \
   --execution-role-arn arn:aws:iam::&lt;your-account-id&gt;:role/MicroVMLambdaPOCRole \
-  --vcpu-count 4 \
-  --memory-size-mb 8192 \
-  --maximum-duration-in-seconds 3600</code></pre>
+  --idle-policy '{"maxIdleDurationSeconds":300,"suspendedDurationSeconds":300,"autoResumeEnabled":true}'</code></pre>
         </figure>
 
-        <p>Pick the smallest size that fits your workload's steady state. Agents running Python and shelling out to <code>gcc</code> or <code>node</code> spend most of their time waiting on I/O, so 2 vCPUs and 2&ndash;4 GB is often plenty. Machine-learning inference or heavy compilation is where the upper end starts to matter.</p>
+        <p>Pick the smallest size that fits your workload's steady state. Agents running Python and shelling out to <code>gcc</code> or <code>node</code> spend most of their time waiting on I/O, so 2 vCPUs and 2&ndash;4 GB is often plenty. Machine-learning inference or heavy compilation is where the upper end starts to matter. If your workload's needs change, that's a new image build, not a flag on an existing one.</p>
 
-        <p>Full parameter definitions live in the <a href="https://docs.aws.amazon.com/lambda/latest/api/API_CreateMicrovm.html" target="_blank" rel="noopener">CreateMicrovm API reference</a>.</p>
+        <p>All three <code>idlePolicy</code> fields shown above are required together when launching &mdash; Chapter 5 covers why omitting any one of them fails validation.</p>
       </section>
 
       <section id="max-duration">
@@ -107,7 +114,7 @@
 
         <p>Every MicroVM has a hard maximum lifetime. The parameter <code>maximumDurationInSeconds</code> accepts values up to <strong>28800</strong> (8 hours), and 28800 is also the default when unspecified. Once that ceiling is reached, the MicroVM is terminated by the platform regardless of what it is doing.</p>
 
-        <p>The clock starts at <code>startedAt</code> and does not pause during suspension. A MicroVM that was suspended for 7 of its 8 hours still gets terminated at the 8-hour mark. For long-lived environments, plan a session-rotation strategy: snapshot state to durable storage, launch a fresh MicroVM, and rehydrate.</p>
+        <p>The clock starts at <code>startedAt</code>, returned when the MicroVM launches. The documentation doesn't spell out whether suspension pauses this clock, so treat it as running continuously until you've verified otherwise against your own account: plan as if a MicroVM suspended for 7 of its 8 hours could still be terminated at the 8-hour mark. For long-lived environments, plan a session-rotation strategy regardless: snapshot state to durable storage, launch a fresh MicroVM, and rehydrate.</p>
 
         <aside class="callout gotcha">
           <span class="callout-title">&#9888;&#65039; Gotcha</span>

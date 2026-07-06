@@ -1,0 +1,138 @@
+[
+  {
+    "id": "ch07-subprocess-timeout-behavior",
+    "chapter": "ch07.html",
+    "claim": "if the timeout expires, the child process is killed and waited for, and TimeoutExpired is re-raised after the child has actually terminated",
+    "category": "gotcha",
+    "citation": "https://docs.python.org/3/library/subprocess.html",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch07-firecracker-kvm-isolation",
+    "chapter": "ch07.html",
+    "claim": "Firecracker microVMs use KVM-based virtualizations that provide enhanced security over traditional VMs.",
+    "category": "benchmark",
+    "citation": "https://firecracker-microvm.github.io/",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch07-jailer-second-line-of-defense",
+    "chapter": "ch07.html",
+    "claim": "Each Firecracker microVM is further isolated with common Linux user-space security barriers by a companion program called 'jailer,' which provides a second line of defense in case the virtualization barrier is ever compromised.",
+    "category": "best-practice",
+    "citation": "https://firecracker-microvm.github.io/",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch07-cgroup-controls",
+    "chapter": "ch07.html",
+    "claim": "per-instance resource limits are enforced through cgroups: memory.limit_in_bytes for memory, cpu.cfs_quota_us for CPU share, and blkio.throttle.io_serviced for disk I/O, plus the jailer's own fsize limit on file size, applied via setrlimit()",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch08-state-persists-suspend-resume",
+    "chapter": "ch08.html",
+    "claim": "state persists across suspend and resume",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch08-internet-egress-connector",
+    "chapter": "ch08.html",
+    "claim": "The managed INTERNET_EGRESS network connector gives outbound HTTPS to arbitrary internet hosts.",
+    "category": "default-value",
+    "citation": "https://docs.aws.amazon.com/lambda/latest/microvm-api/",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch08-base-image-ecr",
+    "chapter": "ch08.html",
+    "claim": "FROM public.ecr.aws/lambda/microvms:al2023-minimal",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch08-delete-microvm-api-name",
+    "chapter": "ch08.html",
+    "claim": "by explicit DeleteMicrovm",
+    "category": "version-specific",
+    "citation": null,
+    "verdict": "DISPUTED"
+  },
+  {
+    "id": "ch09-32gb-disk",
+    "chapter": "ch09.html",
+    "claim": "A Lambda MicroVM gives you a real disk, up to 32 GB per the documented resource ceilings",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch09-virtio-block-device",
+    "chapter": "ch09.html",
+    "claim": "backed by a virtio-block device",
+    "category": "benchmark",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch10-16vcpu-32gb-ceiling",
+    "chapter": "ch10.html",
+    "claim": "The current documented ceilings are 16 vCPUs and 32 GB of memory per MicroVM",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch10-28800-max-duration",
+    "chapter": "ch10.html",
+    "claim": "maximumDurationInSeconds accepts values up to 28800 (8 hours), and 28800 is also the default when unspecified",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch10-clock-not-paused-during-suspension",
+    "chapter": "ch10.html",
+    "claim": "The clock starts at startedAt and does not pause during suspension. A MicroVM that was suspended for 7 of its 8 hours still gets terminated at the 8-hour mark.",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "UNVERIFIED"
+  },
+  {
+    "id": "ch10-create-microvm-api-reference-link",
+    "chapter": "ch10.html",
+    "claim": "Full parameter definitions live in the CreateMicrovm API reference",
+    "category": "best-practice",
+    "citation": "https://docs.aws.amazon.com/lambda/latest/api/API_CreateMicrovm.html",
+    "verdict": "DISPUTED"
+  },
+  {
+    "id": "ch10-create-microvm-command",
+    "chapter": "ch10.html",
+    "claim": "aws lambda-microvms create-microvm",
+    "category": "version-specific",
+    "citation": null,
+    "verdict": "DISPUTED"
+  },
+  {
+    "id": "ch10-jailer-cgroups-link",
+    "chapter": "ch10.html",
+    "claim": "Firecracker uses Linux cgroups (via its jailer) to enforce hard memory and CPU limits at the VM boundary",
+    "category": "best-practice",
+    "citation": "https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch10-128mb-minimum",
+    "chapter": "ch10.html",
+    "claim": "with the smallest useful configurations starting at a fraction of a vCPU and 128 MB",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "UNVERIFIED"
+  }
+]
