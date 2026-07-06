@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 9 &middot; File System Isolation &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Safe path resolution, persistent storage across suspend/resume, and cleaning up user-generated files within disk quotas. Chapter 9 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part III &middot; Building the Sandbox.">
+<meta name="keywords" content="agent sandbox, microvm, filesystem, path traversal, disk quota, workspace cleanup, persistent storage">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch09.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 9 &middot; File System Isolation">
+<meta property="og:description" content="Safe path resolution, persistent storage across suspend/resume, and cleaning up user-generated files within disk quotas.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch09.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 9 &middot; File System Isolation">
+<meta name="twitter:description" content="Safe path resolution, persistent storage across suspend/resume, and cleaning up user-generated files within disk quotas.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 9,
+  "name": "File System Isolation",
+  "description": "Safe path resolution, persistent storage across suspend/resume, and cleaning up user-generated files within disk quotas.",
+  "url": "{{PAGES_URL}}chapters/ch09.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch08.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch10.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Executing Untrusted Code</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Package Management and Dependencies</a></li>
+        <li><a href="ch09.html" class="current"><span class="ch-num">9</span>File System Isolation</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 9</p>
+        <h1>File System Isolation</h1>
+        <p class="subtitle">The disk is real and it persists, which means user-supplied paths and leftover files are now your problem.</p>
+      </header>
+
+      <section id="intro">
+        <h2>The MicroVM's filesystem is not a sandbox by default</h2>
+
+        <p>A Lambda MicroVM gives you a real disk, up to <strong>32 GB</strong> per the documented resource ceilings, backed by a virtio-block device. From inside the guest it looks and behaves like any other Linux filesystem: <code>open()</code>, <code>write()</code>, and <code>os.listdir()</code> work exactly as they do on your laptop. That is convenient and dangerous in equal measure.</p>
+
+        <p>It is convenient because your agent's code doesn't need to know it is running in a MicroVM to read and write files. It is dangerous because nothing about the filesystem itself stops a user-supplied path from walking out of the directory you meant to confine it to. The MicroVM boundary protects you from other tenants' MicroVMs; it does nothing to stop <code>../../etc/passwd</code> from resolving to a real file inside your own guest.</p>
+
+        <p>The two problems this chapter solves are the same shape: something outside your control, a user-supplied path, or an accumulation of files you never explicitly cleaned up, interacts with your workspace directory. You handle both by treating the workspace as a hostile boundary and writing code that enforces its edges.</p>
+      </section>
+
+      <section id="persistence">
+        <h2>Persistent storage across requests</h2>
+
+        <p>As covered in Chapter 8, Lambda MicroVMs preserve disk state across <code>SuspendMicrovm</code> and <code>ResumeMicrovm</code>. That means a workspace directory you write to during one request is still there, byte for byte, on the next request, as long as the MicroVM was suspended rather than terminated.</p>
+
+        <p>This is what makes file-based patterns useful for agents at all. An agent that writes intermediate results, uploaded files, or generated artifacts to <code>/workspace</code> can rely on those files surviving between turns of a conversation. Without persistence, every request would need to re-upload or regenerate everything from scratch.</p>
+
+        <p>The corollary: persistence means accumulation. A workspace directory that nobody cleans up grows forever across a long-lived session, one suspend/resume cycle at a time. That is the problem the rest of this chapter is about.</p>
+      </section>
+
+      <section id="safe-resolve">
+        <h2>Safe path resolution</h2>
+
+        <p>Any time your agent runtime accepts a path from an untrusted source, a filename in a tool call, a field in a request body, an argument the model generated, that path has to be resolved against your workspace root before you touch the filesystem with it. The naive approach, <code>os.path.join(root, user_path)</code>, does not protect you: <code>os.path.join("/workspace", "../etc/passwd")</code> happily returns <code>/workspace/../etc/passwd</code>, and every filesystem call that follows will walk right out of the workspace.</p>
+
+        <p>The fix is to resolve the joined path with <code>os.path.realpath</code>, which collapses <code>..</code> segments and follows symlinks, and then check that the result is still inside the root:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">solutions/ch09.py &mdash; safe_resolve</figcaption>
+          <pre><code class="language-python">def safe_resolve(root: str, user_path: str) -> str:
+    if not root or not os.path.isabs(root):
+        raise ValueError(f"Root must be an absolute path, got: {root!r}")
+
+    if not user_path:
+        raise ValueError("User path must not be empty")
+
+    if os.path.isabs(user_path):
+        raise ValueError(f"User path must be relative, got absolute: {user_path!r}")
+
+    root_resolved = os.path.realpath(root)
+    target = os.path.realpath(os.path.join(root_resolved, user_path))
+
+    if not target.startswith(root_resolved + os.sep) and target != root_resolved:
+        raise ValueError(
+            f"Path traversal detected: {user_path!r} resolves outside root"
+        )
+
+    return target</code></pre>
+        </figure>
+
+        <p>Three checks matter, in order. First, reject an absolute <code>user_path</code> outright: <code>/etc/passwd</code> should never even reach the join, because <code>os.path.join</code> discards everything before an absolute second argument and would silently return <code>/etc/passwd</code> untouched. Second, resolve with <code>realpath</code> so that <code>subdir/../../etc/passwd</code> collapses to its real, final destination instead of a string that merely looks contained. Third, compare the resolved target against the resolved root using a trailing separator (<code>root_resolved + os.sep</code>), not a bare prefix check. Without the separator, a root of <code>/workspace</code> would incorrectly accept a sibling directory like <code>/workspace-evil</code>.</p>
+
+        <p>Running the example against a temporary sandbox root shows the three traversal attempts rejected and the three legitimate paths (including one with a harmless internal <code>..</code> that never leaves the root) resolved cleanly:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">python3 examples/ch09_filesystem_isolation.py &mdash; captured output</figcaption>
+          <pre><code class="language-text">Sandbox root: /var/folders/j5/my01kpqx5fgg6h0ylbjx6hp40000gn/T/tmpaw_1jtue
+
+=== safe_resolve ===
+  OK    'input.txt'                              -> /private/var/.../tmpaw_1jtue/input.txt
+  OK    'data/nested/file.json'                  -> /private/var/.../tmpaw_1jtue/data/nested/file.json
+  OK    'subdir/../top.py'                       -> /private/var/.../tmpaw_1jtue/top.py
+  BLOCK '../etc/passwd'                          -> Path traversal detected: '../etc/passwd' resolves outside root
+  BLOCK '/etc/passwd'                            -> User path must be relative, got absolute: '/etc/passwd'
+  BLOCK 'a/../../../../etc/passwd'               -> Path traversal detected: 'a/../../../../etc/passwd' resolves outside root</code></pre>
+        </figure>
+
+        <p>Note the third accepted case: <code>subdir/../top.py</code> resolves to <code>top.py</code> directly under the root. That is correct: the path never actually leaves the root, it just takes a detour through a directory that does not exist. <code>safe_resolve</code> only rejects paths whose <em>final</em> destination is outside the root, not paths that merely contain a <code>..</code> segment.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888; Gotcha</span>
+          <p><code>realpath</code> also resolves symlinks. If your workspace directory can contain a symlink planted by a previous (possibly malicious) request, say, a file named <code>output.txt</code> that is actually a symlink to <code>/etc/passwd</code>, a naive traversal check on the string alone won't catch it, but <code>realpath</code> will, because it follows the symlink before comparison. This is one more reason to resolve with <code>realpath</code> rather than string manipulation: it collapses both <code>..</code> segments and symlink indirection to the same real destination.</p>
+        </aside>
+      </section>
+
+      <section id="cleanup">
+        <h2>Cleaning up user-generated files</h2>
+
+        <p>Every artifact your agent writes, scratch files, logs, cached build output, is a candidate for cleanup between executions. But not everything should go: a workspace often has files worth preserving across a cleanup pass, such as a persistent scratch script or a checked-out repository the agent is actively working in.</p>
+
+        <p><code>cleanup_workspace</code> walks the top level of a workspace directory, removes everything except a caller-supplied preserve set, and reports what it did:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">solutions/ch09.py &mdash; cleanup_workspace</figcaption>
+          <pre><code class="language-python">def cleanup_workspace(workspace_dir: str, preserve: set[str] | None = None) -> CleanupResult:
+    if not os.path.isdir(workspace_dir):
+        raise ValueError(f"Workspace directory does not exist: {workspace_dir!r}")
+
+    preserve = preserve or set()
+    result = CleanupResult()
+
+    for entry in os.listdir(workspace_dir):
+        entry_path = os.path.join(workspace_dir, entry)
+        if entry in preserve:
+            result.preserved.append(entry)
+            continue
+
+        if os.path.isfile(entry_path) or os.path.islink(entry_path):
+            result.bytes_freed += os.path.getsize(entry_path)
+            os.unlink(entry_path)
+        elif os.path.isdir(entry_path):
+            for dirpath, dirnames, filenames in os.walk(entry_path):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    try:
+                        result.bytes_freed += os.path.getsize(fp)
+                    except OSError:
+                        pass
+            shutil.rmtree(entry_path)
+
+        result.removed.append(entry)
+
+    return result</code></pre>
+        </figure>
+
+        <p>Two details keep this correct. Symlinks are treated as files, via <code>os.unlink</code>, not a recursive walk, so a symlink into another directory never causes cleanup to wander outside the entry itself. And directories are sized <em>before</em> they are deleted: <code>os.walk</code> has to visit every file underneath to add up <code>bytes_freed</code>, then <code>shutil.rmtree</code> removes the whole subtree in one call. Getting the order backwards would report zero bytes freed for every directory.</p>
+
+        <p>Running the example against a workspace with a preserved scratch file, two top-level files, and a nested <code>artifacts/</code> directory shows the accounting:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">python3 examples/ch09_filesystem_isolation.py &mdash; captured output</figcaption>
+          <pre><code class="language-text">=== cleanup_workspace ===
+  before: ['artifacts', 'cache.bin', 'output.log', 'scratch.py']
+  removed:      ['cache.bin', 'artifacts', 'output.log']
+  preserved:    ['scratch.py']
+  bytes freed:  14336
+  after:        ['scratch.py']</code></pre>
+        </figure>
+
+        <p>14,336 bytes freed is the sum of <code>output.log</code> (2,048 bytes), <code>cache.bin</code> (4,096 bytes), and the <code>build.tar</code> file nested inside <code>artifacts/</code> (8,192 bytes). The directory's own metadata contributes nothing; only the files underneath it do.</p>
+      </section>
+
+      <section id="quotas">
+        <h2>Quota management and disk limits</h2>
+
+        <p>Lambda MicroVMs cap total disk at 32 GB, but that ceiling is set once at image-build time and is not something your application code can query or adjust at runtime. Anything finer, per-workspace quotas, per-user limits, warning thresholds, is a layer you build yourself on top of that hard ceiling, the same way Chapter 10's resource limits layer OS-level guards inside a coarser MicroVM boundary.</p>
+
+        <p>The building blocks are the two functions above plus one more measurement: walk the workspace, sum file sizes, and compare against your own configured limit before accepting new writes.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Measuring workspace usage against a quota</figcaption>
+          <pre><code class="language-python">def workspace_size(workspace_dir: str) -> int:
+    total = 0
+    for dirpath, _, filenames in os.walk(workspace_dir):
+        for name in filenames:
+            try:
+                total += os.path.getsize(os.path.join(dirpath, name))
+            except OSError:
+                pass
+    return total
+
+
+def enforce_quota(workspace_dir: str, max_bytes: int, incoming_bytes: int) -> None:
+    current = workspace_size(workspace_dir)
+    if current + incoming_bytes > max_bytes:
+        raise ValueError(
+            f"Quota exceeded: {current + incoming_bytes} bytes would exceed "
+            f"{max_bytes} byte limit"
+        )</code></pre>
+        </figure>
+
+        <p>Check the quota <em>before</em> the write, not after. A write that fails partway through because the underlying disk filled up leaves a truncated file behind, and now your next quota check has to account for a corrupt partial artifact rather than a clean rejection.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Run <code>cleanup_workspace</code> proactively, not just reactively. A common pattern is to call it at the start of every new task with a preserve set scoped to files the current task actually needs, rather than waiting for a quota check to fail. That converts an occasional hard rejection into routine housekeeping the user never notices.</p>
+        </aside>
+      </section>
+
+      <section id="reading-uploads">
+        <h2>Reading uploaded files and artifacts</h2>
+
+        <p>The read path deserves the same discipline as the write path. When an agent tool accepts a filename to open, "read the file the user uploaded as <code>report.csv</code>", that filename is exactly as untrusted as a filename to write to. Route it through <code>safe_resolve</code> first:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Reading a user-referenced file safely</figcaption>
+          <pre><code class="language-python">def read_uploaded_file(workspace_dir: str, filename: str, max_bytes: int = 10_000_000) -> bytes:
+    path = safe_resolve(workspace_dir, filename)
+    if not os.path.isfile(path):
+        raise ValueError(f"No such file: {filename!r}")
+    if os.path.getsize(path) > max_bytes:
+        raise ValueError(f"File too large to read: {filename!r}")
+    with open(path, "rb") as f:
+        return f.read()</code></pre>
+        </figure>
+
+        <p>Two failure modes matter beyond traversal. A path that resolves inside the root but points at a directory, not a file, should fail with a clear error rather than an <code>IsADirectoryError</code> bubbling up from <code>open()</code>. And a file that is technically inside the workspace but far larger than your agent runtime should ever load into memory, a multi-gigabyte log an earlier task left behind, needs its own size check, independent of the aggregate quota, before you read it whole.</p>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Build a file-based code runner</h2>
+
+        <p>Your challenge is to implement the two functions this chapter is built around. Open <code>challenges/ch09.py</code> and implement:</p>
+
+        <ul>
+          <li><code>safe_resolve(root, user_path)</code>: resolve a user-supplied relative path against an absolute root, rejecting empty paths, absolute paths, relative roots, and any traversal that would resolve outside the root. Returns the resolved absolute path.</li>
+          <li><code>cleanup_workspace(workspace_dir, preserve=None)</code>: remove every top-level file and directory in <code>workspace_dir</code> except names in <code>preserve</code>, returning a <code>CleanupResult</code> with <code>removed</code>, <code>preserved</code>, and <code>bytes_freed</code>.</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges && python3 -m pytest ch09_test.py -v</code></pre>
+
+        <p>The suite has 15 cases: eight covering <code>safe_resolve</code>'s traversal, absolute-path, empty-path, and relative-root rejections, and seven covering <code>cleanup_workspace</code>'s removal, preservation, directory recursion, byte accounting, and error handling. Compare with <code>solutions/ch09.py</code> when you are ready.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>The runnable example at <code>examples/ch09_filesystem_isolation.py</code> builds a temporary sandbox root, resolves a mix of legitimate and malicious paths against it, then populates and cleans up a workspace with a preserved file. No AWS calls; run it locally to see the exact output reproduced above.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch08.html">Chapter 8: Package Management and Dependencies</a>
+        <a class="next" href="ch10.html">Chapter 10: Resource Limits and Quotas</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

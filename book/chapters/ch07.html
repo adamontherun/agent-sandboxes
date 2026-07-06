@@ -79,7 +79,7 @@
       <header>
         <p class="chapter-label">Chapter 7</p>
         <h1>Executing Untrusted Code</h1>
-        <p class="subtitle">Receive a snippet, run it, get the output back &mdash; and understand exactly which layer is stopping it from doing something worse.</p>
+        <p class="subtitle">Receive a snippet, run it, get the output back, and understand exactly which layer is stopping it from doing something worse.</p>
       </header>
 
       <section id="intro">
@@ -95,11 +95,11 @@
           <li>Clean up the file, regardless of how execution went.</li>
         </ol>
 
-        <p>None of these five steps is specific to Lambda MicroVMs. You could run this exact Flask app on a laptop, in a Docker container, or inside a MicroVM, and the code would not change. What changes is what surrounds it &mdash; and that is the part worth being precise about, because it is easy to write an endpoint like this and quietly assume it is "sandboxed" when the sandboxing is actually coming from somewhere else entirely (or from nowhere).</p>
+        <p>None of these five steps is specific to Lambda MicroVMs. You could run this exact Flask app on a laptop, in a Docker container, or inside a MicroVM, and the code would not change. What changes is what surrounds it, and that is the part worth being precise about: it is easy to write an endpoint like this and quietly assume it is "sandboxed" when the sandboxing is actually coming from somewhere else entirely (or from nowhere).</p>
 
         <aside class="callout gotcha">
           <span class="callout-title">&#9888; Gotcha</span>
-          <p>This chapter's example script runs on a local dev machine, not inside a real MicroVM &mdash; there is no AWS account interaction here, unlike Chapters 4&ndash;6. The subprocess-level isolation shown below is real and testable locally, but it is not the security boundary. Read the "What the MicroVM actually isolates" section before assuming this endpoint alone is safe to expose to untrusted users.</p>
+          <p>This chapter's example script runs on a local dev machine, not inside a real MicroVM: there is no AWS account interaction here, unlike Chapters 4&ndash;6. The subprocess-level isolation shown below is real and testable locally, but it is not the security boundary. Read the "What the MicroVM actually isolates" section before assuming this endpoint alone is safe to expose to untrusted users.</p>
         </aside>
       </section>
 
@@ -127,7 +127,7 @@ def execute_endpoint():
         "duration_seconds": result.duration_seconds,
     })</code></pre>
 
-        <p>The interesting work is in <code>execute_snippet</code>, not the route handler. The route handler's job is small on purpose: parse the request, reject an obviously bad one, delegate, and serialize the result. Keeping the HTTP layer thin makes the execution logic testable without spinning up Flask at all &mdash; which is exactly what this chapter's challenge does.</p>
+        <p>The interesting work is in <code>execute_snippet</code>, not the route handler. The route handler's job is small on purpose: parse the request, reject an obviously bad one, delegate, and serialize the result. Keeping the HTTP layer thin makes the execution logic testable without spinning up Flask at all, which is exactly what this chapter's challenge does.</p>
       </section>
 
       <section id="write-execute-capture">
@@ -198,13 +198,13 @@ stdout:      ''
 stderr:      'Traceback (most recent call last):\n  File "...", line 1, in &lt;module&gt;\n    raise ValueError(\'this snippet intentionally throws\')\nValueError: this snippet intentionally throws'</code></pre>
         </figure>
 
-        <p>Note the crash case: a Python traceback lands in <code>stderr</code> with a normal nonzero exit code. That is not a bug in the executor &mdash; it is exactly what should happen. The endpoint's job is to report what the snippet did, including "it threw an exception," not to prevent every possible failure inside the snippet.</p>
+        <p>Note the crash case: a Python traceback lands in <code>stderr</code> with a normal nonzero exit code. That is not a bug in the executor; it is exactly what should happen. The endpoint's job is to report what the snippet did, including "it threw an exception," not to prevent every possible failure inside the snippet.</p>
       </section>
 
       <section id="timeouts">
         <h2>Timeout handling and resource limits</h2>
 
-        <p>The most important line in <code>execute_snippet</code> is easy to skim past: <code>timeout=timeout_seconds</code> on the <code>subprocess.run</code> call. Python's own documentation is precise about what this does: <a href="https://docs.python.org/3/library/subprocess.html" target="_blank" rel="noopener">if the timeout expires, the child process is killed and waited for, and <code>TimeoutExpired</code> is re-raised after the child has actually terminated</a>. That guarantee &mdash; the process is dead before your code continues &mdash; is what makes an infinite loop a non-event instead of a leaked runaway process:</p>
+        <p>The most important line in <code>execute_snippet</code> is easy to skim past: <code>timeout=timeout_seconds</code> on the <code>subprocess.run</code> call. Python's own documentation is precise about what this does: <a href="https://docs.python.org/3/library/subprocess.html" target="_blank" rel="noopener">if the timeout expires, the child process is killed and waited for, and <code>TimeoutExpired</code> is re-raised after the child has actually terminated</a>. That guarantee, that the process is dead before your code continues, is what makes an infinite loop a non-event instead of a leaked runaway process:</p>
 
         <figure class="codeblock">
           <figcaption class="code-label">python3 examples/ch07_code_executor.py &mdash; infinite loop snippet (real output)</figcaption>
@@ -220,13 +220,13 @@ stdout:      ''
 stderr:      '[execution timed out]'</code></pre>
         </figure>
 
-        <p>A one-second timeout was passed for this snippet specifically (the rest use the five-second default); the measured duration of 1.003s confirms the kill happened right at the boundary, not some arbitrary amount of time later. <code>exit_code</code> comes back <code>None</code> because the process was killed rather than exiting on its own &mdash; that is the caller's signal to distinguish "the code returned a nonzero status" from "the code never returned at all."</p>
+        <p>A one-second timeout was passed for this snippet specifically (the rest use the five-second default); the measured duration of 1.003s confirms the kill happened right at the boundary, not some arbitrary amount of time later. <code>exit_code</code> comes back <code>None</code> because the process was killed rather than exiting on its own: that is the caller's signal to distinguish "the code returned a nonzero status" from "the code never returned at all."</p>
 
-        <p>A wall-clock timeout is necessary but not sufficient. <code>subprocess.run</code>'s timeout stops a snippet from running forever; it does nothing about a snippet that allocates memory until the host falls over, forks child processes it never cleans up, or opens far more file descriptors than it needs. Those require resource limits, not just a clock &mdash; which is exactly the gap a MicroVM (or, on a self-managed Firecracker host, the jailer) closes rather than the application code.</p>
+        <p>A wall-clock timeout is necessary but not sufficient. <code>subprocess.run</code>'s timeout stops a snippet from running forever; it does nothing about a snippet that allocates memory until the host falls over, forks child processes it never cleans up, or opens far more file descriptors than it needs. Those require resource limits, not just a clock, which is exactly the gap a MicroVM (or, on a self-managed Firecracker host, the jailer) closes rather than the application code.</p>
 
         <aside class="callout underhood">
           <span class="callout-title">&#128300; Under the hood</span>
-          <p>On a self-hosted Firecracker deployment, per-instance resource limits are enforced through cgroups &mdash; <code>memory.limit_in_bytes</code> for memory, <code>cpu.cfs_quota_us</code> for CPU share, and <code>blkio.throttle.io_serviced</code> for disk I/O &mdash; plus the jailer's own <code>fsize</code> limit on file size, applied via <code>setrlimit()</code>. Lambda MicroVMs manage this for you: the memory, vCPU, and disk figures you set at image build time are the resource ceiling the platform enforces, not a suggestion your application code has to police itself.</p>
+          <p>On a self-hosted Firecracker deployment, per-instance resource limits are enforced through cgroups: <code>memory.limit_in_bytes</code> for memory, <code>cpu.cfs_quota_us</code> for CPU share, and <code>blkio.throttle.io_serviced</code> for disk I/O, plus the jailer's own <code>fsize</code> limit on file size, applied via <code>setrlimit()</code>. Lambda MicroVMs manage this for you: the memory, vCPU, and disk figures you set at image build time are the resource ceiling the platform enforces, not a suggestion your application code has to police itself.</p>
         </aside>
       </section>
 
@@ -235,9 +235,9 @@ stderr:      '[execution timed out]'</code></pre>
 
         <p>This is the question the chapter's opening gotcha promised to answer: if <code>subprocess.run</code> with a timeout is not the security boundary, what is?</p>
 
-        <p>Firecracker's own project page is explicit that a MicroVM is not just a process-level sandbox: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">"Firecracker microVMs use KVM-based virtualizations that provide enhanced security over traditional VMs."</a> KVM-based virtualization means the untrusted code is running behind actual hardware virtualization support, the same category of isolation that separates one cloud customer's EC2 instance from another's on the same physical host &mdash; not merely a different Linux user, not a different container namespace, a different virtual machine with its own kernel.</p>
+        <p>Firecracker's own project page is explicit that a MicroVM is not just a process-level sandbox: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">"Firecracker microVMs use KVM-based virtualizations that provide enhanced security over traditional VMs."</a> KVM-based virtualization means the untrusted code is running behind actual hardware virtualization support, the same category of isolation that separates one cloud customer's EC2 instance from another's on the same physical host. It is not merely a different Linux user or a different container namespace; it is a different virtual machine with its own kernel.</p>
 
-        <p>Firecracker adds a second layer on top of that hardware boundary. The project describes a companion program, the jailer, that wraps each microVM with conventional Linux sandboxing on top of the virtualization: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">"Each Firecracker microVM is further isolated with common Linux user-space security barriers by a companion program called 'jailer'," which "provides a second line of defense in case the virtualization barrier is ever compromised."</a> Concretely, per the jailer's own design (see Chapter 2's research notes), that means a chroot via <code>pivot_root()</code>, dedicated mount/PID/network namespaces, and a non-privileged uid/gid the Firecracker process runs as after setup &mdash; defense in depth, not a single wall.</p>
+        <p>Firecracker adds a second layer on top of that hardware boundary. The project describes a companion program, the jailer, that wraps each microVM with conventional Linux sandboxing on top of the virtualization: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">"Each Firecracker microVM is further isolated with common Linux user-space security barriers by a companion program called 'jailer'," which "provides a second line of defense in case the virtualization barrier is ever compromised."</a> Concretely, per the jailer's own design (see Chapter 2's research notes), that means a chroot via <code>pivot_root()</code>, dedicated mount/PID/network namespaces, and a non-privileged uid/gid the Firecracker process runs as after setup: defense in depth, not a single wall.</p>
 
         <p>Put together, here is what actually stops a malicious snippet inside a Lambda MicroVM, and what does not:</p>
 
@@ -246,7 +246,7 @@ stderr:      '[execution timed out]'</code></pre>
           <li><strong>The MicroVM does <em>not</em> automatically isolate:</strong> the snippet from other requests running inside the <em>same</em> MicroVM at the same time, or a snippet from a badly-scoped IAM role attached to that MicroVM's execution role. A shared MicroVM serving many users' snippets sequentially still needs application-level cleanup between requests (Chapter 9 covers this); a MicroVM's network egress still reaches wherever its network connectors point unless you've deliberately restricted them (Chapter 8 touched on this for package registries; Chapter 12 covers hardening it further).</li>
         </ul>
 
-        <p>This chapter's <code>execute_snippet</code> function, running on a local dev machine, gives you exactly the "capture output and enforce a wall-clock timeout" part of that list, and nothing else &mdash; there is no separate kernel here, no memory ceiling, no filesystem boundary beyond ordinary OS file permissions. That is an honest limitation of running this example locally to write and test it quickly; deployed inside a real Lambda MicroVM, the same Flask code gets the rest of the list for free, supplied by the platform underneath it rather than by anything this chapter's Python had to implement.</p>
+        <p>This chapter's <code>execute_snippet</code> function, running on a local dev machine, gives you exactly the "capture output and enforce a wall-clock timeout" part of that list, and nothing else. There is no separate kernel here, no memory ceiling, no filesystem boundary beyond ordinary OS file permissions. That is an honest limitation of running this example locally to write and test it quickly; deployed inside a real Lambda MicroVM, the same Flask code gets the rest of the list for free, supplied by the platform underneath it rather than by anything this chapter's Python had to implement.</p>
 
         <aside class="callout production">
           <span class="callout-title">&#127981; In production</span>
@@ -260,10 +260,10 @@ stderr:      '[execution timed out]'</code></pre>
         <p>Your challenge is to implement the decision logic behind a code-execution endpoint, factored so it can be tested without spawning real subprocesses. Open <code>challenges/ch07.py</code> and implement:</p>
 
         <ul>
-          <li><code>validate_request(payload)</code> &mdash; check an incoming request body for a non-empty <code>code</code> string and an optional positive <code>timeout_seconds</code>, returning an error message or <code>None</code>.</li>
-          <li><code>build_command(script_path)</code> &mdash; build the subprocess argv used to run a saved script.</li>
-          <li><code>summarize_result(stdout, stderr, exit_code, timed_out)</code> &mdash; normalize raw subprocess output into an <code>ExecutionResult</code>.</li>
-          <li><code>is_successful(result)</code> &mdash; decide whether an execution counts as successful (exit code 0 and no timeout &mdash; a timeout with a coincidental zero exit code still does not count).</li>
+          <li><code>validate_request(payload)</code>: check an incoming request body for a non-empty <code>code</code> string and an optional positive <code>timeout_seconds</code>, returning an error message or <code>None</code>.</li>
+          <li><code>build_command(script_path)</code>: build the subprocess argv used to run a saved script.</li>
+          <li><code>summarize_result(stdout, stderr, exit_code, timed_out)</code>: normalize raw subprocess output into an <code>ExecutionResult</code>.</li>
+          <li><code>is_successful(result)</code>: decide whether an execution counts as successful (exit code 0 and no timeout; a timeout with a coincidental zero exit code still does not count).</li>
         </ul>
 
         <p>Run the tests:</p>
@@ -274,7 +274,7 @@ stderr:      '[execution timed out]'</code></pre>
 
         <div class="tryit">
           <h3>&#9889; Try it</h3>
-          <p>The runnable example at <code>examples/ch07_code_executor.py</code> runs a small battery of snippets &mdash; including a crash and an infinite loop &mdash; through a real <code>subprocess</code>-backed executor and prints the captured output, and includes a <code>/execute</code> Flask route showing the HTTP-facing version of the same logic. Run it locally with <code>python3 ch07_code_executor.py</code>; no AWS account needed.</p>
+          <p>The runnable example at <code>examples/ch07_code_executor.py</code> runs a small battery of snippets, including a crash and an infinite loop, through a real <code>subprocess</code>-backed executor and prints the captured output, and includes a <code>/execute</code> Flask route showing the HTTP-facing version of the same logic. Run it locally with <code>python3 ch07_code_executor.py</code>; no AWS account needed.</p>
         </div>
       </section>
 
