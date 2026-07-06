@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 13 &middot; Observability and Debugging &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Integrate CloudWatch Logs, trace execution flow, debug slow or failing sandboxes, monitor costs via idle policies, and build health checks against GetMicrovm state. Chapter 13 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part IV &middot; Advanced Patterns.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, observability, debugging, cloudwatch, logging, tracing, health check, cost optimization">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch13.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 13 &middot; Observability and Debugging &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Integrate CloudWatch Logs, trace execution flow, debug slow or failing sandboxes, monitor costs via idle policies, and build health checks against GetMicrovm state.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch13.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 13 &middot; Observability and Debugging">
+<meta name="twitter:description" content="Integrate CloudWatch Logs, trace execution flow, debug slow or failing sandboxes, monitor costs via idle policies, and build health checks against GetMicrovm state.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 13,
+  "name": "Observability and Debugging",
+  "description": "Integrate CloudWatch Logs, trace execution flow, debug slow or failing sandboxes, monitor costs via idle policies, and build health checks against GetMicrovm state.",
+  "url": "{{PAGES_URL}}chapters/ch13.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch12.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch14.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Networking and Egress Control</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Storage and State</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>File System Isolation</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ol>
+      <p class="part-label">Part IV &middot; Advanced Patterns</p>
+      <ol start="11">
+        <li><a href="ch11.html"><span class="ch-num">11</span>Multi-Tenant Isolation</a></li>
+        <li><a href="ch12.html"><span class="ch-num">12</span>Security Hardening</a></li>
+        <li><a href="ch13.html" class="current"><span class="ch-num">13</span>Observability and Debugging</a></li>
+        <li><a href="ch14.html"><span class="ch-num">14</span>Production Patterns</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 13</p>
+        <h1>Observability and Debugging</h1>
+        <p class="subtitle">A sandbox you can't see into is a sandbox you can't fix. Observability turns a black-box MicroVM into something you can reason about after the fact, without weakening the isolation boundary that makes it useful in the first place.</p>
+      </header>
+
+      <section id="cloudwatch-integration">
+        <h2>CloudWatch Integration for Logs and Metrics</h2>
+
+        <p>Lambda MicroVMs streams both build-time and runtime logs to CloudWatch Logs. The integration is configured through the <code>logging</code> parameter on <a href="https://docs.aws.amazon.com/lambda/latest/microvm-api/API_CreateMicrovmImage.html" target="_blank" rel="noopener"><code>CreateMicrovmImage</code></a>, which the API documentation describes as:</p>
+
+        <blockquote>"The logging configuration for build-time and runtime logs. Specify <code>{"cloudWatch": {"logGroup": "..."}}</code> to stream logs to a custom CloudWatch log group, or <code>{"disabled": {}}</code> to turn off logging."</blockquote>
+
+        <p>In practice, if you supply a <code>logGroup</code> name (or let the service use its default), Lambda MicroVMs creates one log group per image name under the prefix <code>/aws/lambda-microvms/</code>. Within that group, log streams follow two naming patterns observed in real deployments:</p>
+
+        <ul>
+          <li><code>&lt;version&gt;/&lt;request-uuid&gt;</code> &mdash; build-time and early-runtime streams (e.g. <code>11.0/0f34abe4-307a-4882-bb74-c34595e822cf</code>)</li>
+          <li><code>&lt;date&gt;[&lt;version&gt;]microvm-&lt;microvm-id&gt;</code> &mdash; longer-running session streams (e.g. <code>2026/06/24[11.0]microvm-b510854e-5a9e-3da7-b55c-78980805c501</code>)</li>
+        </ul>
+
+        <p>A healthy MicroVM's log stream starts with the application's own startup output. For a FastAPI/uvicorn application baked into the image, the first few events look like this:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Real CloudWatch log events from a running MicroVM</figcaption>
+          <pre><code class="language-text">INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></pre>
+        </figure>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888;&#65039; Gotcha</span>
+          <p>There is no dedicated CloudWatch <em>metrics</em> namespace for Lambda MicroVMs (no <code>AWS/LambdaMicroVMs</code> dimension in CloudWatch Metrics). If you need quantitative signals &mdash; error rates, p99 execution duration, executions per hour &mdash; you build them from log data using CloudWatch Logs Insights queries, or by polling <code>GetMicrovm</code>/<code>ListMicrovms</code> for state-based signals. Don't go looking for pre-built dashboards or metric alarms the way you would for Lambda Functions; they don't exist for this service today.</p>
+        </aside>
+      </section>
+
+      <section id="tracing-execution">
+        <h2>Tracing Execution Flow</h2>
+
+        <p>CloudWatch Logs captures whatever your application writes to stdout/stderr. That means structured logging is entirely your responsibility &mdash; there's no X-Ray integration or distributed tracing built into the service. The practical pattern is: emit one JSON object per log line, with a consistent <code>request_id</code> field across all events belonging to the same execution, so you can correlate them later in Logs Insights without parsing unstructured text.</p>
+
+        <p>The minimal set of fields that makes a log line useful after the fact:</p>
+
+        <ul>
+          <li><strong><code>timestamp</code></strong> &mdash; ISO 8601, so Logs Insights' <code>@timestamp</code> field and your own are both usable without conversion.</li>
+          <li><strong><code>request_id</code></strong> &mdash; a UUID generated at the start of each execution, carried through start and end events.</li>
+          <li><strong><code>event</code></strong> &mdash; a dot-namespaced string (<code>execution.start</code>, <code>execution.end</code>, <code>health_check</code>) you can filter on.</li>
+          <li><strong><code>duration_ms</code></strong> &mdash; on end events, how long the execution took.</li>
+          <li><strong><code>status</code></strong> &mdash; <code>success</code>, <code>error</code>, or <code>timeout</code>.</li>
+        </ul>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch13_observability.py &mdash; real output from running this script locally</figcaption>
+          <pre><code class="language-text">=== Structured Logging Demo ===
+
+--- Successful execution ---
+{"timestamp": "2026-07-06T18:09:43Z", "event": "execution.start", "request_id": "1bf6806e-25e5-422d-8833-fb192bdcead0", "code_length": 23, "timeout_seconds": 5.0}
+{"timestamp": "2026-07-06T18:09:43Z", "event": "execution.end", "request_id": "1bf6806e-25e5-422d-8833-fb192bdcead0", "status": "success", "duration_ms": 0.06, "error": null}
+  -&gt; status=success, output='45', duration=0.06ms
+
+--- Failing execution ---
+{"timestamp": "2026-07-06T18:09:43Z", "event": "execution.start", "request_id": "9dfca081-2e5a-41f9-bb8e-a3aae1cfe3d2", "code_length": 9, "timeout_seconds": 5.0}
+{"timestamp": "2026-07-06T18:09:43Z", "event": "execution.end", "request_id": "9dfca081-2e5a-41f9-bb8e-a3aae1cfe3d2", "status": "error", "duration_ms": 0.03, "error": "ZeroDivisionError: division by zero"}
+  -&gt; status=error, error='ZeroDivisionError: division by zero'
+
+--- Health check: running instance ---
+{"timestamp": "2026-07-06T18:09:43Z", "event": "health_check", "microvm_state": "RUNNING", "healthy": true, "state_reason": ""}
+  -&gt; healthy=True, action=none
+
+--- Health check: terminated instance ---
+{"timestamp": "2026-07-06T18:09:43Z", "event": "health_check", "microvm_state": "TERMINATED", "healthy": false, "state_reason": "Success."}
+  -&gt; healthy=False, action=investigate
+
+=== Done ===</code></pre>
+        </figure>
+
+        <p>Each pair of start/end lines shares a <code>request_id</code>. In CloudWatch Logs Insights, you'd query them with <code>fields @timestamp, request_id, event, status, duration_ms | filter event like /execution/ | sort @timestamp desc</code> to get a table of every execution's outcome without opening individual streams.</p>
+      </section>
+
+      <section id="debugging-failures">
+        <h2>Debugging Slow or Failing Executions</h2>
+
+        <p>When a MicroVM execution fails, the error shows up in CloudWatch Logs as whatever your application wrote to stderr before it died. Real failures look like real tracebacks, not tidy single-line errors. Here's an actual failing execution captured from a running MicroVM &mdash; a timeout during initialization of an agent SDK inside the sandbox:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Real traceback from CloudWatch log stream <code>2026/06/24[11.0]microvm-b510854e-...</code></figcaption>
+          <pre><code class="language-text">Exception: Control request timeout: initialize</code></pre>
+        </figure>
+
+        <p>And a second, distinct failure mode from the same log group &mdash; a case where the agent returned a success status but the orchestrator treated it as an error (a semantic failure rather than a crash):</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Second real failure from CloudWatch Logs Insights query</figcaption>
+          <pre><code class="language-text">Exception: Claude Code returned an error result: success</code></pre>
+        </figure>
+
+        <p>Both of these were found by a single Logs Insights query over a 30-day window:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">CloudWatch Logs Insights query that found both failures</figcaption>
+          <pre><code class="language-text">fields @timestamp, @message
+| filter @message like /Exception/
+| sort @timestamp desc
+| limit 10</code></pre>
+        </figure>
+
+        <p>Query statistics from that real run: <code>recordsMatched: 18</code>, <code>recordsScanned: 2947</code>, <code>bytesScanned: 380376</code> over the 30-day window. Those are small numbers &mdash; consistent with a dev account &mdash; but the pattern scales: Logs Insights scans only the time range and log groups you specify, so pointing it at a single image's log group for the last hour is a fast, cheap way to find every exception across all sessions of that image without reading each stream by hand.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>For high-traffic deployments, create a CloudWatch Logs metric filter on patterns like <code>"Exception"</code> or <code>"error"</code> to drive a CloudWatch Alarm without running Insights queries on a schedule. Metric filters are evaluated on ingestion (no query cost), so they give you near-real-time alerting on failure rates as a free side effect of logs you're already paying to store.</p>
+        </aside>
+      </section>
+
+      <section id="cost-monitoring">
+        <h2>Cost Monitoring and Optimization</h2>
+
+        <p>The primary cost lever Lambda MicroVMs exposes is the idle policy. The <a href="https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html" target="_blank" rel="noopener">developer guide</a> frames this directly: "MicroVMs can be suspended when idle, preserving memory and disk state while reducing costs... You pay the baseline rate while your MicroVM is running and only pay for active use above the baseline."</p>
+
+        <p>The three fields that control this are the same ones Chapter 6 introduced for lifecycle management, now viewed through a cost lens:</p>
+
+        <ul>
+          <li><strong><code>maxIdleDurationSeconds</code></strong> &mdash; how long a MicroVM sits idle before auto-suspending. Lower values save money on instances that are mostly waiting; higher values avoid resume latency for bursty workloads.</li>
+          <li><strong><code>suspendedDurationSeconds</code></strong> &mdash; how long a suspended instance is kept before being terminated entirely. Suspended instances cost less than running ones but more than nothing (state is preserved on disk).</li>
+          <li><strong><code>autoResumeEnabled</code></strong> &mdash; whether an incoming request automatically wakes a suspended instance. If false, suspended instances must be explicitly resumed via <code>ResumeMicrovm</code>.</li>
+        </ul>
+
+        <p>There is no dedicated Cost Explorer or Budgets integration specific to Lambda MicroVMs. Cost visibility comes from the same sources as any other AWS service: the billing console's service-level breakdown and (if you need finer granularity) cost allocation tags applied to your MicroVM images. The observability-specific angle is: if you're running more MicroVMs than you need, or leaving them running longer than they're used, the signal is in your own logs and <code>ListMicrovms</code> output &mdash; count how many are in <code>RUNNING</code> state versus how many had an execution in the last N minutes, and you've built the only "cost metric" the service gives you the raw data for.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>Aggressive auto-suspend (e.g. <code>maxIdleDurationSeconds: 60</code>) is the simplest cost optimization for sandbox workloads where executions are bursty and separated by minutes or hours of idle time. The tradeoff is resume latency &mdash; typically a few hundred milliseconds to restore a snapshot, but variable depending on memory size. If your workload is latency-sensitive and bursty, measure resume times in your own logs before tightening the idle threshold.</p>
+        </aside>
+      </section>
+
+      <section id="health-checks">
+        <h2>Health Checks and Error Handling</h2>
+
+        <p>The cheapest health signal for a MicroVM is the <code>state</code> and <code>stateReason</code> fields on a <code>GetMicrovm</code> response. Polling this is faster and cheaper than running a Logs Insights query, and it tells you whether an instance is alive without having to parse log content:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Real GetMicrovm response fields for a terminated instance</figcaption>
+          <pre><code class="language-json">{
+  "state": "TERMINATED",
+  "terminatedAt": "2026-07-05T21:47:36.936000-10:00",
+  "stateReason": "Success."
+}</code></pre>
+        </figure>
+
+        <p>A health-check function maps these states to actions:</p>
+
+        <ul>
+          <li><code>RUNNING</code> &mdash; healthy, no action needed.</li>
+          <li><code>SUSPENDED</code> &mdash; healthy (cost-optimized idle state), will auto-resume on next request if <code>autoResumeEnabled</code> is true.</li>
+          <li><code>TERMINATED</code> &mdash; investigate. Check <code>stateReason</code>: "Success." means a clean shutdown (e.g. <code>maximumDurationInSeconds</code> reached after 8 hours, or explicit <code>TerminateMicrovm</code> call); anything else is unexpected.</li>
+          <li><code>FAILED</code> or unknown &mdash; investigate immediately. Check CloudWatch Logs for the corresponding stream.</li>
+        </ul>
+
+        <p>For error handling in your orchestrator, the pattern is: attempt the execution, check the HTTP response from the MicroVM's endpoint, and if it fails, check <code>GetMicrovm</code> to determine whether the failure is transient (instance still running, just a code error) or structural (instance terminated/failed, needs a new <code>RunMicrovm</code>). Log both the execution-level error and the instance state so you can correlate them later.</p>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Add Comprehensive Logging</h2>
+
+        <p>Your challenge is to build the structured logging system described in this chapter: a logger that records execution lifecycle events as structured entries suitable for CloudWatch Logs, supports request-level tracing with timing, and includes health-check logic.</p>
+
+        <p>Open <code>challenges/ch13.py</code> and implement <code>ExecutionLogger</code>:</p>
+
+        <ul>
+          <li><code>start(code, timeout_seconds)</code> &mdash; record an <code>execution.start</code> event with <code>code_length</code> and <code>timeout_seconds</code> in data; return a unique <code>request_id</code>.</li>
+          <li><code>end(request_id, status, error=None)</code> &mdash; record an <code>execution.end</code> event with <code>status</code>, <code>duration_ms</code> (elapsed since the matching <code>start()</code>), and <code>error</code>.</li>
+          <li><code>health_check(microvm_state)</code> &mdash; record a <code>health_check</code> event and return a dict with <code>healthy</code>, <code>state</code>, <code>stateReason</code>, and <code>action</code> keys.</li>
+          <li><code>get_logs()</code> and <code>get_logs_for_request(request_id)</code> &mdash; retrieve recorded entries.</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges &amp;&amp; python3 -m pytest ch13_test.py -v</code></pre>
+
+        <p>Seventeen tests cover log entry serialization, start/end event recording, duration calculation, health-check logic for each MicroVM state, and log filtering by request ID. See <code>solutions/ch13.py</code> when you're ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>Run <code>examples/ch13_observability.py</code> to see structured JSON log lines emitted for successful and failing executions, plus health checks against simulated MicroVM states &mdash; entirely offline, no AWS calls required.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch12.html">Chapter 12: Security Hardening</a>
+        <a class="next" href="ch14.html">Chapter 14: Production Patterns</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

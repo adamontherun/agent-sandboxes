@@ -393,3 +393,125 @@ The chapter's application-level code scanner (`examples/ch12_code_scanner.py`,
 sourced from an external doc &mdash; it's framed explicitly in the chapter text
 as the app-level complement to the OS-level KVM/seccomp/jailer layers, not a
 restatement of them.
+
+## Chapter 13 (Observability and Debugging) research
+
+### CreateMicrovmImage `logging` parameter (confirmed live, 2026-07-06)
+
+Fetched `https://docs.aws.amazon.com/lambda/latest/microvm-api/API_CreateMicrovmImage.html`
+directly (not from memory) and confirmed the exact doc text, both on the
+request parameter and the response element (identical wording in both
+places):
+
+> The logging configuration for build-time and runtime logs. Specify
+> `{"cloudWatch": {"logGroup": "..."}}` to stream logs to a custom CloudWatch
+> log group, or `{"disabled": {}}` to turn off logging.
+
+Type: `Logging` object, a tagged union (only one member may be set) &mdash;
+confirmed matching the `--logging` CLI shorthand already captured earlier in
+this file (`{"cloudWatch": {"logGroup": "string", "logStream": "string"}}` or
+`{"disabled": {}}`). Note the API doc's own example only shows `logGroup`
+inside `cloudWatch`; `logStream` is accepted too (confirmed via `aws
+lambda-microvms create-microvm-image help` in the CLI, captured earlier in
+this file) but is optional &mdash; AWS auto-generates a log stream name per
+build/run if omitted, which matches every real log-stream name observed
+below (they're all `<version>/<uuid>` or `<date>[<version>]<microvm-id>`
+patterns, never a name we supplied).
+
+### Real CloudWatch Logs captured live from the `poc` account (2026-07-06)
+
+`AWS_PROFILE=poc`, account `024989304407`, `us-east-1`. This account already
+has real MicroVM image build/runtime logs flowing into CloudWatch from
+earlier chapters' work &mdash; reused for Chapter 13 rather than generating
+synthetic logs, per the "never fabricate output" rule.
+
+- `aws logs describe-log-groups --log-group-name-prefix /aws/lambda-microvms`
+  returns real log groups, one per image name, e.g.
+  `/aws/lambda-microvms/lambda-microvms-poc-hello-world` (166478 bytes
+  stored), `/aws/lambda-microvms/lambda-microvms-egress-test` (220042 bytes),
+  `/aws/lambda-microvms/ch04-hello-sandbox`. Confirms Lambda MicroVMs creates
+  one log group per *image name*, not per MicroVM instance or per build.
+- `aws logs describe-log-streams --log-group-name
+  /aws/lambda-microvms/lambda-microvms-poc-hello-world --order-by
+  LastEventTime --descending` shows two real log-stream naming patterns in
+  the same log group: `<version>/<request-uuid>` (build-time / early runtime
+  streams, e.g. `11.0/0f34abe4-307a-4882-bb74-c34595e822cf`) and
+  `<date>[<version>]microvm-<microvm-id>` (longer-running session streams,
+  e.g. `2026/06/24[11.0]microvm-b510854e-5a9e-3da7-b55c-78980805c501`).
+- `aws logs get-log-events` on the `11.0/0f34abe4-...` stream returns a real,
+  ordinary FastAPI/uvicorn startup sequence:
+  ```
+  INFO:     Started server process [1]
+  INFO:     Waiting for application startup.
+  INFO:     Application startup complete.
+  INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+  ```
+- `aws logs get-log-events` on the `2026/06/24[11.0]microvm-b510854e-...`
+  stream captured a **real failing execution** &mdash; a genuine Python
+  traceback ending in `Exception: Control request timeout: initialize`,
+  raised from `claude_agent_sdk/_internal/query.py` inside the sandboxed
+  app. Real, not fabricated: this is an actual timeout that occurred during
+  earlier course-build work in this same account, preserved in CloudWatch.
+  Good honest example of "a failing execution's log output actually looks
+  like this," including a full multi-frame traceback rather than a single
+  clean error line.
+- CloudWatch Logs Insights (`aws logs start-query` /
+  `aws logs get-query-results`) works against these real log groups.
+  `fields @timestamp, @message | filter @message like /Exception/ | sort
+  @timestamp desc | limit 10` over the `lambda-microvms-poc-hello-world`
+  group returned real matches spanning multiple sessions/days, including
+  `Exception: Control request timeout: initialize` and
+  `Exception: Claude Code returned an error result: success` &mdash; a second,
+  distinct real failure mode, confirming that Insights queries scoped by
+  `@message like /pattern/` are a practical way to find every failing
+  execution across a log group without reading each stream by hand.
+  Query statistics from a real run: `recordsMatched: 18`, `recordsScanned:
+  2947`, `bytesScanned: 380376` over a 30-day window &mdash; small numbers,
+  consistent with a low-traffic dev account, not fabricated round numbers.
+
+### Real GetMicrovm fields relevant to health/error state (confirmed live)
+
+`aws lambda-microvms get-microvm --microvm-identifier
+microvm-29fabacb-68fe-30ed-b477-39bf36e55b16` on a terminated instance
+returned a real `stateReason` field not previously captured in this file:
+```json
+"state": "TERMINATED",
+"terminatedAt": "2026-07-05T21:47:36.936000-10:00",
+"stateReason": "Success."
+```
+Confirms `GetMicrovm` carries a human-readable `stateReason` string
+alongside `state` and (when applicable) `terminatedAt` &mdash; useful as a
+first health-check signal without needing to open CloudWatch at all, since
+polling `GetMicrovm` is cheaper than a Logs Insights query for "did this
+instance end cleanly."
+
+### CloudWatch metrics namespace
+
+`aws cloudwatch list-metrics --namespace AWS/Lambda` and an unscoped
+`list-metrics` call against the `poc` account returned **no** Lambda
+MicroVMs-specific metrics namespace (only IAM/Logs/other pre-existing
+resource dimensions from earlier chapters' work showed up as dimension
+values, no actual metric namespace for MicroVM CPU/memory/invocations).
+Do not claim a specific `AWS/LambdaMicroVMs` (or similar) CloudWatch metrics
+namespace exists in the chapter &mdash; it wasn't observed live in this
+account, and the developer guide page fetched for this chapter
+(`lambda-microvms-guide.html`) doesn't document one either. Frame Chapter
+13's "metrics" coverage around real, confirmed capabilities only: CloudWatch
+*Logs* (confirmed above), Logs Insights queries over log content as the
+practical substitute for dedicated metrics, and `GetMicrovm`/`ListMicrovms`
+polling for state-based health signals. This is a real, honest gap worth
+naming in the chapter rather than inventing metric names.
+
+### Cost optimization
+
+Reused from the developer guide's own framing (`lambda-microvms-guide.html`,
+already fetched for Chapter 7/12, re-confirmed live 2026-07-06 for this
+chapter): "MicroVMs can be suspended when idle, preserving memory and disk
+state while reducing costs... You pay the baseline rate while your MicroVM
+is running and only pay for active use above the baseline." Combine with
+the idle-policy fields already captured in this file
+(`maxIdleDurationSeconds`, `suspendedDurationSeconds`, `autoResumeEnabled`)
+for the concrete cost-optimization mechanism: aggressive auto-suspend is the
+primary cost lever Lambda MicroVMs exposes, not a separate cost-monitoring
+API. No dedicated Cost Explorer / Budgets integration specific to Lambda
+MicroVMs was found or claimed.
