@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 5 · Launching and Connecting — Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Launch a MicroVM, authenticate with JWE tokens, and make your first request. Chapter 5 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part II · Hands-On.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, run, auth token, JWE">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch05.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 5 · Launching and Connecting — Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Launch a MicroVM, authenticate with JWE tokens, and make your first request.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch05.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 5 · Launching and Connecting">
+<meta name="twitter:description" content="Launch a MicroVM, authenticate with JWE tokens, and make your first request.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 5,
+  "name": "Launching and Connecting",
+  "description": "Launch a MicroVM, authenticate with JWE tokens, and make your first request.",
+  "url": "{{PAGES_URL}}chapters/ch05.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch04.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch06.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I · Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II · Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html" class="current"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 5</p>
+        <h1>Launching and Connecting</h1>
+        <p class="subtitle">From image to running sandbox in five seconds, with authenticated access.</p>
+      </header>
+
+      <section id="run-microvm">
+        <h2>Launching with RunMicrovm</h2>
+
+        <p>With an image built (Chapter 4), you can launch MicroVM instances from it. Each <code>RunMicrovm</code> call creates a dedicated VM restored from the image snapshot:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash">aws lambda-microvms run-microvm \
+  --image-identifier arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:lambda-microvms-poc-hello-world \
+  --execution-role-arn arn:aws:iam::&lt;your-account-id&gt;:role/MicroVMLambdaPOCRole \
+  --idle-policy '{"maxIdleDurationSeconds":300,"suspendedDurationSeconds":300,"autoResumeEnabled":true}'</code></pre>
+        </figure>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Response (real output, redacted)</figcaption>
+          <pre><code class="language-json">{
+    "microvmId": "microvm-29fabacb-68fe-30ed-b477-39bf36e55b16",
+    "state": "PENDING",
+    "endpoint": "&lt;random-id&gt;.lambda-microvm.us-east-1.on.aws",
+    "imageArn": "arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:lambda-microvms-poc-hello-world",
+    "imageVersion": "11.0",
+    "executionRoleArn": "arn:aws:iam::&lt;your-account-id&gt;:role/MicroVMLambdaPOCRole",
+    "idlePolicy": {
+        "maxIdleDurationSeconds": 300,
+        "suspendedDurationSeconds": 300,
+        "autoResumeEnabled": true
+    },
+    "maximumDurationInSeconds": 28800,
+    "startedAt": "2026-07-05T21:43:41.138000-10:00",
+    "ingressNetworkConnectors": [
+        "arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:HTTP_INGRESS"
+    ],
+    "egressNetworkConnectors": [
+        "arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:INTERNET_EGRESS"
+    ]
+}</code></pre>
+        </figure>
+
+        <p>The response arrives immediately with <code>state: PENDING</code>. Within 5 seconds, <code>GetMicrovm</code> reports <code>state: RUNNING</code>. That 5-second window covers network routing setup on top of <a href="https://github.com/firecracker-microvm/firecracker" target="_blank" rel="noopener">Firecracker's sub-125ms snapshot restore</a>.</p>
+
+        <p>Note that <code>maximumDurationInSeconds</code> defaults to 28800 (8 hours). This is the absolute maximum lifetime of a single session, regardless of activity. After 8 hours the VM is terminated unconditionally.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888; Gotcha</span>
+          <p>The <code>--idle-policy</code> parameter requires all three fields together. If you omit <code>suspendedDurationSeconds</code> or <code>autoResumeEnabled</code>, the API rejects the request:</p>
+          <pre><code>An error occurred (ParamValidation): Parameter validation failed:
+Missing required parameter in idlePolicy: "suspendedDurationSeconds"
+Missing required parameter in idlePolicy: "autoResumeEnabled"</code></pre>
+          <p>You might reasonably assume these are independently optional. They are not. All three or none.</p>
+        </aside>
+      </section>
+
+      <section id="resource-configuration">
+        <h2>Resource Configuration</h2>
+
+        <p>Each MicroVM instance can be configured with up to <a href="https://aws.amazon.com/lambda/lambda-microvms/" target="_blank" rel="noopener">16 vCPUs, 32 GB memory, and 32 GB disk</a>. These limits are set at the image level (during <code>CreateMicrovmImage</code>) rather than at launch time.</p>
+
+        <p>The default configuration allocates 2048 MiB of memory (the minimum). For compute-heavy workloads like compilation or data processing, configure higher resources during the image build:</p>
+
+        <pre><code class="language-bash">aws lambda-microvms create-microvm-image \
+  --name heavy-compute-image \
+  --base-image-arn arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1 \
+  --build-role-arn arn:aws:iam::&lt;your-account-id&gt;:role/my-build-role \
+  --code-artifact uri=s3://bucket/artifact.zip \
+  --resources '[{"minimumMemoryInMiB": 8192}]'</code></pre>
+
+        <p>The default network connectors provide HTTP ingress and internet egress without any explicit configuration. You get a unique HTTPS endpoint per MicroVM instance and full outbound internet access.</p>
+      </section>
+
+      <section id="auth-tokens">
+        <h2>Authentication with JWE Tokens</h2>
+
+        <p>MicroVMs are not publicly accessible. Every request to the endpoint must carry a short-lived token in the <code>X-aws-proxy-auth</code> header. You create tokens with <code>CreateMicrovmAuthToken</code>:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash">aws lambda-microvms create-microvm-auth-token \
+  --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16 \
+  --expiration-in-minutes 15 \
+  --allowed-ports '[{"port":5000}]'</code></pre>
+        </figure>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Response (real output, token truncated)</figcaption>
+          <pre><code class="language-json">{
+    "authToken": {
+        "X-aws-proxy-auth": "eyJraWQiOiJ...&lt;JWE token&gt;...w"
+    }
+}</code></pre>
+        </figure>
+
+        <p>The token is a <a href="https://tools.ietf.org/html/rfc7516" target="_blank" rel="noopener">JWE (JSON Web Encryption)</a> compact serialization string with five dot-separated base64url segments: protected header, encrypted key, IV, ciphertext, and authentication tag. This is a real encryption envelope, not just a signed JWT.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888; Gotcha</span>
+          <p>The <code>--allowed-ports</code> parameter is a tagged union. Each entry must contain exactly one key: <code>port</code>, <code>range</code>, or <code>allPorts</code>. Adding a <code>protocol</code> field (which you might expect to exist) produces this error:</p>
+          <pre><code>An error occurred (ParamValidation): Parameter validation failed:
+Invalid number of parameters set for tagged union structure allowedPorts[0].
+Can only set one of the following keys: port. range. allPorts.
+Unknown parameter in allowedPorts[0]: "protocol", must be one of: port, range, allPorts</code></pre>
+          <p>The valid shapes are: <code>{"port": 5000}</code>, <code>{"range": {"start": 8000, "end": 9000}}</code>, or <code>{"allPorts": true}</code>.</p>
+        </aside>
+      </section>
+
+      <section id="first-request">
+        <h2>Making Your First Request</h2>
+
+        <p>With a token in hand, make an authenticated HTTPS request to your MicroVM endpoint:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash">curl -H "X-aws-proxy-auth: eyJraWQiOiJ..." \
+  https://&lt;random-id&gt;.lambda-microvm.us-east-1.on.aws/</code></pre>
+        </figure>
+
+        <p>If your image runs a Flask app on port 5000 and your token authorizes that port, you should receive:</p>
+
+        <pre><code class="language-json">{"message": "Hello, Sandbox!", "status": "running"}</code></pre>
+
+        <p>The same pattern works from Python:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Python</figcaption>
+          <pre><code class="language-python">import urllib.request
+
+endpoint = "&lt;random-id&gt;.lambda-microvm.us-east-1.on.aws"
+token = "eyJraWQiOiJ..."  # from create-microvm-auth-token
+
+req = urllib.request.Request(f"https://{endpoint}/")
+req.add_header("X-aws-proxy-auth", token)
+
+resp = urllib.request.urlopen(req, timeout=10)
+print(resp.read().decode())</code></pre>
+        </figure>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>The <code>*.lambda-microvm.us-east-1.on.aws</code> endpoint is a per-instance HTTPS hostname. AWS handles TLS termination and routes the request to your specific MicroVM after validating the JWE token. The token is decrypted at the routing layer, never by your application code. Your app just sees a normal HTTP request on the port you specified.</p>
+        </aside>
+      </section>
+
+      <section id="inspecting-status">
+        <h2>Inspecting MicroVM Status</h2>
+
+        <p>Use <code>GetMicrovm</code> at any time to check the current state, resource allocation, and timing information:</p>
+
+        <pre><code class="language-bash">aws lambda-microvms get-microvm --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16</code></pre>
+
+        <p>The response includes the current state (<code>PENDING</code>, <code>RUNNING</code>, <code>SUSPENDED</code>, or <code>TERMINATED</code>), the endpoint URL, idle policy, network connectors, and the <code>startedAt</code> timestamp. This is your primary observability tool for individual MicroVM instances.</p>
+
+        <p>For listing all instances across your account, use <code>ListMicrovms</code>. Terminated instances remain in the list with minimal metadata (no endpoint or policy fields), which is useful for auditing session history.</p>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Build RunMicrovm and Auth Token Helpers</h2>
+
+        <p>Your challenge is to implement three helper functions that construct API parameters and parse responses. These are the kind of SDK wrapper functions you would write to avoid the gotchas we encountered above.</p>
+
+        <p>Open <code>challenges/ch05.py</code> and implement:</p>
+
+        <ul>
+          <li><code>build_run_microvm_params()</code> - constructs RunMicrovm parameters, always including all three idle policy fields</li>
+          <li><code>build_auth_token_params()</code> - constructs auth token parameters, validating the tagged-union port spec</li>
+          <li><code>parse_microvm_status()</code> - parses a GetMicrovm response into a simplified status summary</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges && python3 -m pytest ch05_test.py -v</code></pre>
+
+        <p>The test suite includes 17 cases covering parameter construction with validation, tagged-union enforcement, and response parsing. See <code>solutions/ch05.py</code> when you are ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>The runnable example at <code>examples/ch05_launch_and_connect.py</code> shows the full launch-authenticate-request-terminate flow. To run it against your own account, update the placeholder ARNs at the bottom of the script.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch04.html">Chapter 4: Your First MicroVM Image</a>
+        <a class="next" href="ch06.html">Chapter 6: Lifecycle Management</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

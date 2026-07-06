@@ -181,3 +181,190 @@ rule. Every drafting subagent for Parts II-V should:
 6. If a command requires a resource this account doesn't have permissions for,
    or the CLI errors, capture the real error text (redacted) rather than
    inventing a plausible-looking success — a real error is still real output.
+
+## Verified Real CLI Transcript (captured live, poc account, 2026-07-05)
+
+This is a genuine end-to-end lifecycle run against the existing
+`lambda-microvms-poc-hello-world` image (version 11.0). Drafting agents for
+Parts II-V should use this real transcript for Chapters 5-6 rather than
+re-deriving it, and may reuse the same command shapes (with fresh
+microvm-identifiers) for other chapters that need real output. Account ID
+and endpoint below are redacted in any book HTML — use `<your-account-id>`
+and a placeholder endpoint pattern instead.
+
+### 1. RunMicrovm
+
+Command:
+```
+aws lambda-microvms run-microvm \
+  --image-identifier arn:aws:lambda:us-east-1:<account-id>:microvm-image:lambda-microvms-poc-hello-world \
+  --execution-role-arn arn:aws:iam::<account-id>:role/MicroVMLambdaPOCRole \
+  --idle-policy '{"maxIdleDurationSeconds":300,"suspendedDurationSeconds":300,"autoResumeEnabled":true}'
+```
+
+Real output (redacted):
+```json
+{
+    "microvmId": "microvm-29fabacb-68fe-30ed-b477-39bf36e55b16",
+    "state": "PENDING",
+    "endpoint": "<random-id>.lambda-microvm.us-east-1.on.aws",
+    "imageArn": "arn:aws:lambda:us-east-1:<account-id>:microvm-image:lambda-microvms-poc-hello-world",
+    "imageVersion": "11.0",
+    "executionRoleArn": "arn:aws:iam::<account-id>:role/MicroVMLambdaPOCRole",
+    "idlePolicy": {
+        "maxIdleDurationSeconds": 300,
+        "suspendedDurationSeconds": 300,
+        "autoResumeEnabled": true
+    },
+    "maximumDurationInSeconds": 28800,
+    "startedAt": "2026-07-05T21:43:41.138000-10:00",
+    "ingressNetworkConnectors": [
+        "arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:HTTP_INGRESS"
+    ],
+    "egressNetworkConnectors": [
+        "arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:INTERNET_EGRESS"
+    ]
+}
+```
+
+**Real gotcha caught**: omitting `suspendedDurationSeconds`/`autoResumeEnabled`
+from `--idle-policy` produces:
+```
+aws: [ERROR]: An error occurred (ParamValidation): Parameter validation failed:
+Missing required parameter in idlePolicy: "suspendedDurationSeconds"
+Missing required parameter in idlePolicy: "autoResumeEnabled"
+```
+All three idle-policy fields are required together — worth calling out in
+Chapter 5, since a reader would reasonably assume they're independently
+optional.
+
+**Confirms**: `maximumDurationInSeconds` defaults to 28800 (= 8 hours),
+matching the documented max-runtime spec. Default network connectors are
+`HTTP_INGRESS` and `INTERNET_EGRESS` — no explicit
+`--ingress-network-connectors`/`--egress-network-connectors` needed for
+basic outbound internet + inbound HTTP.
+
+### 2. GetMicrovm (5s after launch)
+
+Real output showed `"state": "RUNNING"` within 5 seconds of the `run-microvm`
+call returning `PENDING` — consistent with Firecracker's <125ms VM boot time
+plus image/network setup overhead.
+
+### 3. CreateMicrovmAuthToken
+
+Command:
+```
+aws lambda-microvms create-microvm-auth-token \
+  --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16 \
+  --expiration-in-minutes 15 \
+  --allowed-ports '[{"port":5000}]'
+```
+
+**Real gotcha caught**: `allowedPorts` is a tagged union — passing
+`{"port":5000,"protocol":"HTTP"}` fails:
+```
+aws: [ERROR]: An error occurred (ParamValidation): Parameter validation failed:
+Invalid number of parameters set for tagged union structure allowedPorts[0].
+Can only set one of the following keys: port. range. allPorts.
+Unknown parameter in allowedPorts[0]: "protocol", must be one of: port, range, allPorts
+```
+Correct shape is `{"port": 5000}` only — no protocol field, and each list
+entry sets exactly one of `port`, `range`, or `allPorts`. Worth calling out
+explicitly since the tagged-union error message is easy to misread as "add
+a protocol field" when it's actually "remove a field."
+
+Real (successful) response shape:
+```json
+{
+    "authToken": {
+        "X-aws-proxy-auth": "eyJraWQiOiJ...<long JWE compact-serialization token>...w"
+    }
+}
+```
+Confirms the announcement's claim that auth is a JWE token attached via the
+`X-aws-proxy-auth` header — this is a real JWE compact serialization
+(5 dot-separated base64url segments: protected header, encrypted key, IV,
+ciphertext, tag), matching JOSE/JWE spec shape, not a made-up token format.
+
+**Environment note**: hitting the actual HTTPS endpoint with this token
+timed out from this build environment's network sandbox (the
+`*.lambda-microvm.us-east-1.on.aws` domain isn't in the allowed egress
+list here) — that's a build-environment restriction, not a MicroVM/service
+issue. A reader running this from a normal shell should expect the curl to
+succeed once past this environment's constraints; note this honestly in the
+chapter rather than showing a fabricated 200 response body.
+
+### 4. SuspendMicrovm / ResumeMicrovm
+
+Both calls return **no output body** on success (confirmed twice, live).
+State transitions confirmed via follow-up `GetMicrovm`:
+- After `suspend-microvm` + 3s: `state: SUSPENDED`
+- After `resume-microvm` + 3s: `state: RUNNING`
+
+### 5. TerminateMicrovm
+
+Also returns no output body on success. Follow-up `ListMicrovms` confirmed
+`state: TERMINATED` for the instance, with `startedAt` preserved in the
+record. No `endpoint`/`idlePolicy`/network-connector fields are present in
+the terminated instance's list entry — those are only populated while
+non-terminal.
+
+### Available IAM roles in this account (for reference in examples)
+- `arn:aws:iam::<account-id>:role/MicroVMLambdaPOCRole` — general execution role, used above
+- `arn:aws:iam::<account-id>:role/LambdaMicroVMsNetworkConnectorRole`
+- `arn:aws:iam::<account-id>:role/service-role/adam-microvm-image-test-1-build-role-2ced5777` — image build role pattern
+
+## Additional Real API Detail: CreateMicrovmImage (from live `help` + calls)
+
+- `--base-image-arn` [required]: e.g. `arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1`
+  — confirmed via real `ListManagedMicrovmImages` call (only one managed base
+  image currently listed: `al2023-1`).
+- `--build-role-arn` [required]: IAM role ARN pattern
+  `arn:aws:iam::<account>:role/<role-name>` assumed during build.
+- `--code-artifact` [required, tagged union, only one key: `uri`]:
+  ```json
+  {"uri": "s3://bucket/path/artifact.zip"}
+  ```
+  (or an ECR image URI). Shorthand: `uri=string`.
+- `--name` [required].
+- `--logging` (tagged union, one of `disabled` or `cloudWatch`):
+  ```json
+  {"cloudWatch": {"logGroup": "string", "logStream": "string"}}
+  ```
+  or `{"disabled": {}}`.
+- Build is asynchronous: image goes `CREATING` → `CREATED` (success) or
+  `CREATE_FAILED`. Poll with `GetMicrovmImage`.
+- Other optional params exist: `--cpu-configurations`, `--resources`,
+  `--additional-os-capabilities`, `--hooks`, `--environment-variables`,
+  `--egress-network-connectors`, `--tags`, `--client-token`.
+
+### Real ListMicrovmImageBuilds output (existing image, version 11.0)
+
+Confirms builds are per chipset generation — the same image version produced
+TWO separate successful builds, one per Graviton generation:
+```json
+{
+  "items": [
+    {"imageVersion": "11.0", "buildId": "...", "buildState": "SUCCESSFUL",
+     "architecture": "ARM_64", "chipset": "GRAVITON", "chipsetGeneration": "4", ...},
+    {"imageVersion": "11.0", "buildId": "...", "buildState": "SUCCESSFUL",
+     "architecture": "ARM_64", "chipset": "GRAVITON", "chipsetGeneration": "3", ...}
+  ]
+}
+```
+This confirms the ARM64-only architecture claim from the product page AND
+reveals a previously-undocumented detail worth telling readers: one image
+version can have multiple builds, one per Graviton generation, and
+`list-microvm-image-builds` requires `--image-version` (not just the image
+identifier) as a required parameter — a small but real gotcha for anyone
+scripting around builds.
+
+### Note on new image builds
+
+Did not trigger a fresh `create-microvm-image` build during research capture
+(real Docker build, takes real time/cost, and the account already has three
+working example images to reuse: `lambda-microvms-poc-hello-world`,
+`lambda-microvms-egress-test`, `adam-microvm-image-test-1`). Chapter 4's
+drafting agent should decide whether the "Hello, Sandbox" challenge needs an
+actual fresh build to be honest, and if so, run exactly ONE real build,
+capture its output, and note the real wall-clock time observed.

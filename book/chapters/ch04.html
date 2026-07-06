@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 4 · Your First MicroVM Image — Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Build and deploy a MicroVM image from scratch using CreateMicrovmImage. Chapter 4 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part II · Hands-On.">
+<meta name="keywords" content="agent sandbox, microvm, firecracker, lambda, docker, image build">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch04.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 4 · Your First MicroVM Image — Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Build and deploy a MicroVM image from scratch using CreateMicrovmImage.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch04.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 4 · Your First MicroVM Image">
+<meta name="twitter:description" content="Build and deploy a MicroVM image from scratch using CreateMicrovmImage.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 4,
+  "name": "Your First MicroVM Image",
+  "description": "Build and deploy a MicroVM image from scratch using CreateMicrovmImage.",
+  "url": "{{PAGES_URL}}chapters/ch04.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch03.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch05.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I · Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II · Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html" class="current"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 4</p>
+        <h1>Your First MicroVM Image</h1>
+        <p class="subtitle">From Dockerfile to bootable snapshot in under three minutes.</p>
+      </header>
+
+      <section id="prerequisites">
+        <h2>Prerequisites</h2>
+
+        <p>Before you can build images, you need three things configured in your AWS account:</p>
+
+        <p><strong>AWS CLI v2</strong> with the <code>lambda-microvms</code> subcommand available. Verify with <code>aws lambda-microvms help</code>. If the subcommand is not present, update your CLI to the latest version.</p>
+
+        <p><strong>An S3 bucket</strong> for storing your code artifacts. The build service pulls your application code from S3 during the image build process. Any bucket in the same region works.</p>
+
+        <p><strong>A build role</strong> that the Lambda MicroVMs service can assume during the build. This role needs two permissions: read access to your S3 artifact, and write access to CloudWatch Logs for build output. The trust policy must allow <code>lambda.amazonaws.com</code> to assume the role, scoped to your specific image ARN.</p>
+
+        <pre><code class="language-json">{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "lambda.amazonaws.com"},
+    "Action": "sts:AssumeRole",
+    "Condition": {
+      "StringEquals": {"aws:SourceAccount": "&lt;your-account-id&gt;"},
+      "ArnEquals": {
+        "aws:SourceArn": [
+          "arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1",
+          "arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:&lt;your-image-name&gt;"
+        ]
+      }
+    }
+  }]
+}</code></pre>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888; Gotcha</span>
+          <p>The trust policy's <code>ArnEquals</code> condition must include both the base image ARN <em>and</em> your new image's ARN. If you only include the base image, the service can start the build but fails when it tries to write the resulting snapshot. The error message says "We were unable to assume the role provided" without explaining which step failed.</p>
+        </aside>
+      </section>
+
+      <section id="the-application">
+        <h2>Writing a Simple Flask Application</h2>
+
+        <p>A MicroVM image packages your application into a bootable snapshot. When a MicroVM launches from this image, your application is already running and ready to serve requests. Let's start with a minimal Flask app:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">app.py</figcaption>
+          <pre><code class="language-python">from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+@app.route("/")
+def hello():
+    return jsonify({"message": "Hello, Sandbox!", "status": "running"})
+
+@app.route("/health")
+def health():
+    return jsonify({"healthy": True})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)</code></pre>
+        </figure>
+
+        <p>This app listens on port 5000 and responds to two routes. The health endpoint will be useful later when we verify our MicroVM is actually serving traffic after launch.</p>
+      </section>
+
+      <section id="dockerfile">
+        <h2>The Dockerfile</h2>
+
+        <p>Lambda MicroVMs use a Dockerfile to define the image contents. The base image is an Amazon Linux 2023 minimal image provided by AWS. You layer your dependencies and application code on top:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Dockerfile</figcaption>
+          <pre><code class="language-dockerfile">FROM public.ecr.aws/lambda/microvms:al2023-minimal
+RUN dnf install -y python3 python3-pip && dnf clean all
+COPY app.py /app/app.py
+RUN pip3 install flask
+WORKDIR /app
+CMD ["python3", "app.py"]</code></pre>
+        </figure>
+
+        <p>The base image <code>public.ecr.aws/lambda/microvms:al2023-minimal</code> corresponds to the managed base image ARN <code>arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1</code>. As of this writing, that is the <a href="https://docs.aws.amazon.com/lambda/latest/microvm-api/" target="_blank" rel="noopener">only managed base image available</a> in the service.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>The build process does not just produce a Docker container. It runs your Dockerfile, starts the resulting container, waits for your CMD to initialize, then takes a Firecracker memory+disk snapshot of the running VM. When a user later calls <code>RunMicrovm</code>, they get a restored copy of that exact snapshot state. Your Flask app is already listening before the first request arrives.</p>
+        </aside>
+      </section>
+
+      <section id="code-artifact">
+        <h2>Packaging and Uploading the Code Artifact</h2>
+
+        <p>The build service expects a zip file in S3 containing your Dockerfile and application code:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash"># Package your code
+zip artifact.zip app.py Dockerfile
+
+# Upload to S3
+aws s3 cp artifact.zip s3://my-bucket/ch04-hello-sandbox/artifact.zip</code></pre>
+        </figure>
+
+        <p>The zip file should contain the Dockerfile at its root level. Any files referenced by COPY instructions in the Dockerfile should also be at the root of the zip.</p>
+      </section>
+
+      <section id="create-image">
+        <h2>Creating the Image</h2>
+
+        <p>With the artifact uploaded, trigger the build:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash">aws lambda-microvms create-microvm-image \
+  --name ch04-hello-sandbox \
+  --base-image-arn arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1 \
+  --build-role-arn arn:aws:iam::&lt;your-account-id&gt;:role/service-role/my-build-role \
+  --code-artifact uri=s3://my-bucket/ch04-hello-sandbox/artifact.zip</code></pre>
+        </figure>
+
+        <p>The response comes back immediately with <code>state: CREATING</code>:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Response (real output, redacted)</figcaption>
+          <pre><code class="language-json">{
+    "imageArn": "arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:ch04-hello-sandbox",
+    "name": "ch04-hello-sandbox",
+    "state": "CREATING",
+    "createdAt": "2026-07-05T22:38:29.500000-10:00",
+    "baseImageArn": "arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1",
+    "baseImageVersion": "0.0",
+    "buildRoleArn": "arn:aws:iam::&lt;your-account-id&gt;:role/service-role/my-build-role",
+    "codeArtifact": {
+        "uri": "s3://my-bucket/ch04-hello-sandbox/artifact.zip"
+    },
+    "egressNetworkConnectors": [
+        "arn:aws:lambda:us-east-1:aws:network-connector:aws-network-connector:INTERNET_EGRESS"
+    ],
+    "resources": [{"minimumMemoryInMiB": 2048}],
+    "imageVersion": "1.0"
+}</code></pre>
+        </figure>
+
+        <p>The build is asynchronous. The service pulls your zip from S3, runs the Dockerfile, starts the resulting application, and snapshots the running state. Poll with <code>get-microvm-image</code> until the state transitions to <code>CREATED</code> (or <code>UPDATED</code> for subsequent versions).</p>
+
+        <p>In testing, this build completed in approximately <strong>3 minutes</strong> for a minimal Flask application. The service builds two snapshots in parallel, one for each supported <a href="https://aws.amazon.com/ec2/graviton/" target="_blank" rel="noopener">Graviton generation</a> (3 and 4), so your image works on either chip without rebuilding.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Build status (real output)</figcaption>
+          <pre><code class="language-json">{
+    "items": [
+        {
+            "imageVersion": "3.0",
+            "buildId": "0ec1efed-d6ed-43fb-ad13-5e68268879f6",
+            "buildState": "SUCCESSFUL",
+            "architecture": "ARM_64",
+            "chipset": "GRAVITON",
+            "chipsetGeneration": "3"
+        },
+        {
+            "imageVersion": "3.0",
+            "buildId": "e829f66a-65ce-4e50-8ac2-e35189b82e7b",
+            "buildState": "SUCCESSFUL",
+            "architecture": "ARM_64",
+            "chipset": "GRAVITON",
+            "chipsetGeneration": "4"
+        }
+    ]
+}</code></pre>
+        </figure>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>The <code>list-microvm-image-builds</code> command requires <code>--image-version</code> as a required parameter, not just the image identifier. If you are scripting around builds, you must first capture the version from the create/update response, then pass it when checking build status. This is a small but real gotcha for anyone automating the build pipeline.</p>
+        </aside>
+      </section>
+
+      <section id="build-logs">
+        <h2>Watching Build Logs</h2>
+
+        <p>Build output streams to CloudWatch Logs at the path <code>/aws/lambda-microvms/&lt;image-name&gt;</code>. You can tail these logs in real-time:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash">aws logs tail /aws/lambda-microvms/ch04-hello-sandbox --follow</code></pre>
+        </figure>
+
+        <p>The logs show the Docker build steps, package installation output, and any errors encountered during the build. If your build fails, this is where you find out why.</p>
+      </section>
+
+      <section id="common-failures">
+        <h2>Common Build Failures</h2>
+
+        <p>Two failure modes came up during testing of this chapter that are worth calling out:</p>
+
+        <p><strong>"We were unable to assume the role provided."</strong> This means the build role's trust policy does not include your image ARN in its <code>ArnEquals</code> condition. The trust policy must list both the base image ARN and your new image's ARN.</p>
+
+        <p><strong>"Access denied when fetching artifact from S3."</strong> The build role's IAM policy must grant <code>s3:GetObject</code> on the exact S3 object path of your artifact. A policy scoped to a different key path will fail silently (the build starts but cannot pull your code).</p>
+
+        <p>Both of these are permissions issues, not code issues. If your Dockerfile is correct but the build fails immediately, check IAM before anything else.</p>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Validate Image Build Parameters</h2>
+
+        <p>Your challenge is to implement two functions that validate and generate the inputs for a <code>CreateMicrovmImage</code> call. This is the kind of pre-flight validation your deployment tooling should do before sending a request to AWS.</p>
+
+        <p>Open <code>challenges/ch04.py</code> and implement:</p>
+
+        <ul>
+          <li><code>validate_create_image_params(params)</code> - validates the required parameters (name format, ARN patterns, code artifact structure, resource limits)</li>
+          <li><code>generate_dockerfile(base_image, app_file, packages, port)</code> - generates a valid Dockerfile string from components</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges && python3 -m pytest ch04_test.py -v</code></pre>
+
+        <p>The test suite includes 21 cases covering parameter validation (missing fields, format checking, resource limits) and Dockerfile generation. See <code>solutions/ch04.py</code> when you are ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>The runnable example at <code>examples/ch04_build_image.py</code> shows the full build workflow including polling for completion. To run it against your own account, update the placeholder values at the bottom of the script with your real ARNs and bucket name.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch03.html">Chapter 3: Lambda MicroVMs Architecture</a>
+        <a class="next" href="ch05.html">Chapter 5: Launching and Connecting</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

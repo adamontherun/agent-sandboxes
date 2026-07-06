@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 6 · Lifecycle Management — Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Suspend, resume, and terminate MicroVMs for cost optimization and graceful cleanup. Chapter 6 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part II · Hands-On.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, suspend, resume, terminate, lifecycle">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch06.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 6 · Lifecycle Management — Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="Suspend, resume, and terminate MicroVMs for cost optimization and graceful cleanup.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch06.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 6 · Lifecycle Management">
+<meta name="twitter:description" content="Suspend, resume, and terminate MicroVMs for cost optimization and graceful cleanup.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 6,
+  "name": "Lifecycle Management",
+  "description": "Suspend, resume, and terminate MicroVMs for cost optimization and graceful cleanup.",
+  "url": "{{PAGES_URL}}chapters/ch06.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch05.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch07.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I · Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II · Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html" class="current"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 6</p>
+        <h1>Lifecycle Management</h1>
+        <p class="subtitle">Suspend idle sessions to stop the meter, resume them instantly when needed, and terminate gracefully when done.</p>
+      </header>
+
+      <section id="suspend-resume">
+        <h2>Manual Suspend and Resume</h2>
+
+        <p>A running MicroVM costs money every second it is active. When a user walks away for lunch, you do not want to keep paying for an idle VM. The suspend/resume mechanism lets you pause a session without losing any state:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash"># Suspend a running MicroVM
+aws lambda-microvms suspend-microvm \
+  --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16
+
+# (no output on success)
+
+# Verify state change
+aws lambda-microvms get-microvm \
+  --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16 \
+  --query "state" --output text
+
+# SUSPENDED</code></pre>
+        </figure>
+
+        <p>Both <code>SuspendMicrovm</code> and <code>ResumeMicrovm</code> return no response body on success. This is confirmed behavior from a live test, not a documentation gap. The state transition completes within about 3 seconds, verified via a follow-up <code>GetMicrovm</code> call.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash"># Resume the suspended MicroVM
+aws lambda-microvms resume-microvm \
+  --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16
+
+# (no output on success)
+
+# Verify it's running again
+aws lambda-microvms get-microvm \
+  --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16 \
+  --query "state" --output text
+
+# RUNNING</code></pre>
+        </figure>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>Suspension takes a Firecracker snapshot of the VM's memory and disk state, then releases the underlying compute. Resume restores from that snapshot. Because <a href="https://github.com/firecracker-microvm/firecracker" target="_blank" rel="noopener">Firecracker's snapshot restore runs in under 125ms</a>, the resume is nearly instantaneous from the user's perspective. The 3-second wall-clock time includes network re-routing overhead on top of the raw restore.</p>
+        </aside>
+      </section>
+
+      <section id="state-persistence">
+        <h2>What Survives Suspension</h2>
+
+        <p>When a MicroVM is suspended and later resumed, the following state is preserved:</p>
+
+        <ul>
+          <li><strong>Memory</strong> - all process memory, including heap allocations, global variables, and stack frames</li>
+          <li><strong>Disk</strong> - the full filesystem, including any files written during the session</li>
+          <li><strong>Processes</strong> - all running processes resume from exactly where they paused, including open file descriptors and network sockets</li>
+        </ul>
+
+        <p>From the application's perspective, time appears to skip forward. A <code>time.time()</code> call before suspend and after resume will show the elapsed wall-clock time, but no code executed during that gap. Network connections established before suspension may time out on the remote end during the suspended period, so applications should handle reconnection gracefully.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>If your application maintains long-lived connections (WebSockets, database pools, gRPC streams), add reconnection logic that triggers on resume. A simple pattern: catch connection errors on first use after any idle period and re-establish automatically.</p>
+        </aside>
+      </section>
+
+      <section id="auto-suspension">
+        <h2>Auto-Suspension and Cost Optimization</h2>
+
+        <p>The idle policy you set at launch time controls automatic suspension. The three fields work together as a state machine:</p>
+
+        <ol>
+          <li><code>maxIdleDurationSeconds</code> - after this many seconds with no incoming requests, the MicroVM is automatically suspended</li>
+          <li><code>suspendedDurationSeconds</code> - after this many seconds in the SUSPENDED state (with no resume), the MicroVM is terminated</li>
+          <li><code>autoResumeEnabled</code> - if true, an incoming request to a SUSPENDED MicroVM triggers automatic resume before the request is forwarded</li>
+        </ol>
+
+        <p>A typical configuration for an interactive coding assistant:</p>
+
+        <pre><code class="language-json">{
+    "maxIdleDurationSeconds": 300,
+    "suspendedDurationSeconds": 3600,
+    "autoResumeEnabled": true
+}</code></pre>
+
+        <p>This means: suspend after 5 minutes idle, terminate after 1 hour suspended, and auto-resume if the user comes back. The user experiences a brief delay (a few seconds) on the first request after idle, then full speed from there.</p>
+
+        <p>For batch workloads that should not auto-resume (you want them to finish their current work and stop):</p>
+
+        <pre><code class="language-json">{
+    "maxIdleDurationSeconds": 60,
+    "suspendedDurationSeconds": 60,
+    "autoResumeEnabled": false
+}</code></pre>
+
+        <p>This aggressively reclaims resources: 1 minute idle triggers suspension, 1 minute suspended triggers termination, and no automatic wake-up.</p>
+      </section>
+
+      <section id="termination">
+        <h2>Graceful Termination</h2>
+
+        <p>Termination is permanent. Once terminated, a MicroVM cannot be resumed. All state is destroyed.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminal</figcaption>
+          <pre><code class="language-bash">aws lambda-microvms terminate-microvm \
+  --microvm-identifier microvm-29fabacb-68fe-30ed-b477-39bf36e55b16
+
+# (no output on success)</code></pre>
+        </figure>
+
+        <p>After termination, the instance remains in <code>ListMicrovms</code> with <code>state: TERMINATED</code> but only retains minimal metadata. The endpoint URL, idle policy, and network connector fields are absent from terminated entries:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">Terminated instance in ListMicrovms (real output)</figcaption>
+          <pre><code class="language-json">{
+    "microvmId": "microvm-29fabacb-68fe-30ed-b477-39bf36e55b16",
+    "state": "TERMINATED",
+    "imageArn": "arn:aws:lambda:us-east-1:&lt;your-account-id&gt;:microvm-image:lambda-microvms-poc-hello-world",
+    "imageVersion": "11.0",
+    "executionRoleArn": "arn:aws:iam::&lt;your-account-id&gt;:role/MicroVMLambdaPOCRole",
+    "startedAt": "2026-07-05T21:43:41.138000-10:00"
+}</code></pre>
+        </figure>
+
+        <p>This is useful for audit trails and billing reconciliation. You can see when each session started and which image it ran, even after the session is gone.</p>
+      </section>
+
+      <section id="failures-and-timeouts">
+        <h2>Handling Failures and Timeouts</h2>
+
+        <p>Several failure modes to handle in your orchestration layer:</p>
+
+        <p><strong>Suspend of a non-running instance.</strong> Calling <code>SuspendMicrovm</code> on a PENDING or already-SUSPENDED instance will fail. Always check state with <code>GetMicrovm</code> before issuing lifecycle commands, or handle the error gracefully.</p>
+
+        <p><strong>Resume timeout.</strong> If a resume takes longer than expected (rare, but possible under high load), poll <code>GetMicrovm</code> rather than assuming instant state transition. A 10-second timeout with 3-second polling intervals is a reasonable default.</p>
+
+        <p><strong>The 8-hour wall clock.</strong> The <code>maximumDurationInSeconds</code> (default 28800) is an absolute ceiling. Even if the MicroVM has been suspended for most of its life, the clock ticks from <code>startedAt</code> to termination. Plan for session rotation if your use case needs longer-lived environments.</p>
+
+        <p><strong>Terminate during operations.</strong> You can terminate a MicroVM in any non-terminal state (PENDING, RUNNING, SUSPENDED). This is your escape hatch if something goes wrong. Always prefer explicit termination over relying solely on idle-policy timeouts for cleanup.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Build your orchestrator with a "terminate on cleanup" guarantee. Use try/finally patterns (or equivalent in your language) to ensure every launched MicroVM gets terminated, even if your control plane crashes. A stale running MicroVM is a billing leak. Run periodic <code>ListMicrovms</code> sweeps to catch any that escaped your cleanup logic.</p>
+        </aside>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Implement a Lifecycle Policy Engine</h2>
+
+        <p>Your challenge is to implement the decision logic that an orchestrator uses to manage MicroVM state transitions. Given the current state of a MicroVM (idle duration, suspended duration, whether a request is waiting) and its configured policy, determine what action to take.</p>
+
+        <p>Open <code>challenges/ch06.py</code> and implement:</p>
+
+        <ul>
+          <li><code>should_suspend()</code> - decide if a running MicroVM should be suspended based on idle time</li>
+          <li><code>should_terminate()</code> - decide if a suspended MicroVM should be terminated</li>
+          <li><code>should_auto_resume()</code> - decide if a suspended MicroVM should be woken up</li>
+          <li><code>compute_lifecycle_action()</code> - combine the above into a single decision function</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges && python3 -m pytest ch06_test.py -v</code></pre>
+
+        <p>The test suite includes 21 cases covering each decision function independently and the combined logic, including edge cases like resume-takes-priority-over-terminate (if a user returns just as the terminate timer fires, the user wins). See <code>solutions/ch06.py</code> when you are ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>The runnable example at <code>examples/ch06_lifecycle_management.py</code> demonstrates the full suspend/resume/terminate cycle against a real MicroVM. Update the placeholder ARNs to run it against your own account.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch05.html">Chapter 5: Launching and Connecting</a>
+        <a class="next" href="ch07.html">Chapter 7: Networking and Egress Control</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>
