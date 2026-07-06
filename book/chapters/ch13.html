@@ -200,7 +200,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></
       <section id="cost-monitoring">
         <h2>Cost Monitoring and Optimization</h2>
 
-        <p>The primary cost lever Lambda MicroVMs exposes is the idle policy. The <a href="https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html" target="_blank" rel="noopener">developer guide</a> frames this directly: "MicroVMs can be suspended when idle, preserving memory and disk state while reducing costs... You pay the baseline rate while your MicroVM is running and only pay for active use above the baseline."</p>
+        <p>The primary cost lever Lambda MicroVMs exposes is the idle policy. The <a href="https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html" target="_blank" rel="noopener">developer guide</a> describes suspension as a way of "preserving memory and disk state while reducing costs" when a MicroVM sits idle, and separately notes that pricing works on a baseline-plus-burst model: "you pay the baseline rate while your MicroVM is running and only pay for active use above the baseline."</p>
 
         <p>The three fields that control this are the same ones Chapter 6 introduced for lifecycle management, now viewed through a cost lens:</p>
 
@@ -214,7 +214,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)</code></
 
         <aside class="callout underhood">
           <span class="callout-title">&#128300; Under the hood</span>
-          <p>Aggressive auto-suspend (e.g. <code>maxIdleDurationSeconds: 60</code>) is the simplest cost optimization for sandbox workloads where executions are bursty and separated by minutes or hours of idle time. The tradeoff is resume latency: typically a few hundred milliseconds to restore a snapshot, but variable depending on memory size. If your workload is latency-sensitive and bursty, measure resume times in your own logs before tightening the idle threshold.</p>
+          <p>Aggressive auto-suspend (e.g. <code>maxIdleDurationSeconds: 60</code>) is the simplest cost optimization for sandbox workloads where executions are bursty and separated by minutes or hours of idle time. The tradeoff is resume latency, which isn't a number AWS documents directly and will vary with memory size and workload. If your workload is latency-sensitive and bursty, measure resume times in your own logs before tightening the idle threshold.</p>
         </aside>
       </section>
 

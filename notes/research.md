@@ -78,7 +78,9 @@
 1. User provides Dockerfile + code artifact (S3 URI)
 2. Lambda builds Docker image, initializes application
 3. Lambda creates snapshot of running environment state
-4. Build logs stream to CloudWatch: `/aws/lambda/microvms/<image-name>`
+4. Build logs stream to CloudWatch: `/aws/lambda-microvms/<image-name>` (verified
+   live via `describe-log-groups` — see the Chapter 13 research section below;
+   this line originally had the prefix wrong as `/aws/lambda/microvms/`)
 
 ### Base Images
 - `arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1` (Amazon Linux 2023 minimal)

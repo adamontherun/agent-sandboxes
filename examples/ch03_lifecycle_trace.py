@@ -68,7 +68,7 @@ def main():
         "CreatedAt": "2026-07-05T10:00:00Z",
         "BaseImage": "arn:aws:lambda:us-east-1:aws:microvm-image:al2023-1",
     })
-    print("  Build logs stream to CloudWatch: /aws/lambda/microvms/agent-sandbox-v1")
+    print("  Build logs stream to CloudWatch: /aws/lambda-microvms/agent-sandbox-v1")
     print("  The service builds the Dockerfile, boots the image, and takes a snapshot.")
 
     # Step 2: Image ready

@@ -188,7 +188,7 @@ Candidate 14.1 failed health check (state=TERMINATED); aborting cutover, staying
 
         <aside class="callout underhood">
           <span class="callout-title">&#128300; Under the hood</span>
-          <p>The AWS CLI itself already retries transient errors on most API calls by default (adaptive retry mode with exponential backoff), so if you're calling <code>RunMicrovm</code> through the CLI or an SDK rather than raw HTTP, you may already be getting some of this for free at the transport level. Application-level retry logic like this chapter's example still matters on top of that for anything the SDK doesn't retry automatically, like a launch that "succeeds" into a bad state, which no HTTP-layer retry logic can detect.</p>
+          <p>The AWS CLI itself already retries transient errors on most API calls by default (<a href="https://docs.aws.amazon.com/sdkref/latest/guide/feature-retry-behavior.html" target="_blank" rel="noopener">standard retry mode</a> with exponential backoff), so if you're calling <code>RunMicrovm</code> through the CLI or an SDK rather than raw HTTP, you may already be getting some of this for free at the transport level. Application-level retry logic like this chapter's example still matters on top of that for anything the SDK doesn't retry automatically, like a launch that "succeeds" into a bad state, which no HTTP-layer retry logic can detect.</p>
         </aside>
       </section>
 

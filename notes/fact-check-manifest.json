@@ -134,5 +134,277 @@
     "category": "default-value",
     "citation": null,
     "verdict": "UNVERIFIED"
+  },
+  {
+    "id": "ch11-dedicated-per-tenant-isolation",
+    "chapter": "ch11.html",
+    "claim": "Firecracker's hardware-level isolation applies at the tenant boundary: one tenant's process table, filesystem, and memory are never visible to another, because they are never in the same guest kernel.",
+    "category": "best-practice",
+    "citation": "https://firecracker-microvm.github.io/",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch11-product-page-use-case",
+    "chapter": "ch11.html",
+    "claim": "The product page lists \"multi-tenant applications requiring per-user isolation\" as a named use case.",
+    "category": "best-practice",
+    "citation": "https://aws.amazon.com/lambda/lambda-microvms/",
+    "verdict": "DISPUTED"
+  },
+  {
+    "id": "ch11-runmicrovm-getmicrovm-no-tenant-concept",
+    "chapter": "ch11.html",
+    "claim": "RunMicrovm, GetMicrovm, and the rest don't know anything about tenants, only about MicroVM identifiers.",
+    "category": "api-syntax",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch11-firecracker-boot-under-125ms-gotcha",
+    "chapter": "ch11.html",
+    "claim": "Firecracker's own boot time is under 125ms, but image/network setup on top of that was closer to a few seconds in the live transcript captured for Chapters 5-6.",
+    "category": "benchmark",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch11-execution-role-arn-flag",
+    "chapter": "ch11.html",
+    "claim": "Every RunMicrovm call in the transcripts used throughout this course has passed an --execution-role-arn.",
+    "category": "api-syntax",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch11-iam-roles-account",
+    "chapter": "ch11.html",
+    "claim": "The account used to capture this course's live transcripts has, among others, MicroVMLambdaPOCRole and LambdaMicroVMsNetworkConnectorRole.",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch11-iam-session-tags-pattern",
+    "chapter": "ch11.html",
+    "claim": "A single role's trust policy allows your orchestrator to assume it with a session tag identifying the tenant, and the role's own permission policy uses that tag in its resource conditions (the same pattern AWS documents generally for IAM roles and session tags).",
+    "category": "best-practice",
+    "citation": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_terms-and-concepts.html",
+    "verdict": "DISPUTED"
+  },
+  {
+    "id": "ch11-terminatemicrovm-evict",
+    "chapter": "ch11.html",
+    "claim": "evict_dedicated(tenant_id) \u2014 remove a dedicated tenant's assignment entirely (simulating TerminateMicrovm).",
+    "category": "api-syntax",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch11-maxidledurationseconds-reference",
+    "chapter": "ch11.html",
+    "claim": "Even with an aggressive maxIdleDurationSeconds (Chapter 6) suspending an idle tenant's MicroVM, you are still paying for a distinct instance, a distinct endpoint, and distinct snapshot storage per tenant.",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch12-default-network-connectors",
+    "chapter": "ch12.html",
+    "claim": "HTTP_INGRESS and INTERNET_EGRESS, both attached by default unless you override them with --ingress-network-connectors/--egress-network-connectors on RunMicrovm.",
+    "category": "default-value",
+    "citation": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch12-kvm-quote",
+    "chapter": "ch12.html",
+    "claim": "\"Firecracker microVMs use KVM-based virtualizations that provide enhanced security over traditional VMs.\"",
+    "category": "best-practice",
+    "citation": "https://firecracker-microvm.github.io/",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch12-jailer-purpose-quote",
+    "chapter": "ch12.html",
+    "claim": "the jailer \"is a program designed to isolate the Firecracker process in order to enhance Firecracker's security posture\" and is not a general-purpose sandboxing tool.",
+    "category": "best-practice",
+    "citation": "https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch12-jailer-mechanics",
+    "chapter": "ch12.html",
+    "claim": "Jailer builds a chroot jail via pivot_root(), creates dedicated mount/PID/(optional) network namespaces, applies cgroup limits via --cgroup and --resource-limit, and drops privileges to a specified non-root --uid/--gid before exec'ing Firecracker.",
+    "category": "api-syntax",
+    "citation": "https://github.com/firecracker-microvm/firecracker/blob/main/docs/jailer.md",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch12-cgroup-resource-limit-specifics",
+    "chapter": "ch12.html",
+    "claim": "Cgroups v1/v2 mechanism for per-instance memory (memory.limit_in_bytes), CPU (cpu.cfs_quota_us), and disk I/O (blkio.throttle.io_serviced) controls.",
+    "category": "default-value",
+    "citation": "https://github.com/firecracker-microvm/firecracker/blob/main/docs/prod-host-setup.md",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch12-jailer-second-line-of-defense-quote",
+    "chapter": "ch12.html",
+    "claim": "each microVM is \"further isolated with common Linux user-space security barriers by a companion program called 'jailer,'\" which \"provides a second line of defense in case the virtualization barrier is ever compromised.\"",
+    "category": "best-practice",
+    "citation": "https://firecracker-microvm.github.io/",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch12-dns-exfiltration-gotcha",
+    "chapter": "ch12.html",
+    "claim": "Blocking egress at the network layer does not block DNS-based exfiltration by itself; a process that can resolve arbitrary hostnames can smuggle data out one DNS query at a time.",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch13-createmicrovmimage-logging-quote",
+    "chapter": "ch13.html",
+    "claim": "\"The logging configuration for build-time and runtime logs. Specify {\\\"cloudWatch\\\": {\\\"logGroup\\\": \\\"...\\\"}} to stream logs to a custom CloudWatch log group, or {\\\"disabled\\\": {}} to turn off logging.\"",
+    "category": "api-syntax",
+    "citation": "https://docs.aws.amazon.com/lambda/latest/microvm-api/API_CreateMicrovmImage.html",
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch13-log-group-prefix",
+    "chapter": "ch13.html",
+    "claim": "Lambda MicroVMs creates one log group per image name under the prefix /aws/lambda-microvms/.",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch13-log-stream-naming-patterns",
+    "chapter": "ch13.html",
+    "claim": "Log streams follow two naming patterns: <version>/<request-uuid> and <date>[<version>]microvm-<microvm-id>.",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch13-no-metrics-namespace",
+    "chapter": "ch13.html",
+    "claim": "There is no dedicated CloudWatch metrics namespace for Lambda MicroVMs (no AWS/LambdaMicroVMs dimension in CloudWatch Metrics).",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch13-cost-quote",
+    "chapter": "ch13.html",
+    "claim": "\"MicroVMs can be suspended when idle, preserving memory and disk state while reducing costs... You pay the baseline rate while your MicroVM is running and only pay for active use above the baseline.\"",
+    "category": "best-practice",
+    "citation": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-microvms-guide.html",
+    "verdict": "DISPUTED"
+  },
+  {
+    "id": "ch13-idle-policy-fields",
+    "chapter": "ch13.html",
+    "claim": "maxIdleDurationSeconds, suspendedDurationSeconds, and autoResumeEnabled are the three fields controlling idle/suspend cost behavior.",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch13-getmicrovm-statereason",
+    "chapter": "ch13.html",
+    "claim": "GetMicrovm response for a terminated instance includes state, terminatedAt, and stateReason (\"Success.\" for a clean shutdown).",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch13-resume-latency-estimate",
+    "chapter": "ch13.html",
+    "claim": "Resume from suspend is typically a few hundred milliseconds to restore a snapshot, but variable depending on memory size.",
+    "category": "benchmark",
+    "citation": null,
+    "verdict": "UNVERIFIED"
+  },
+  {
+    "id": "ch13-query-stats",
+    "chapter": "ch13.html",
+    "claim": "recordsMatched: 18, recordsScanned: 2947, bytesScanned: 380376 over a 30-day Logs Insights query window.",
+    "category": "benchmark",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-createmicrovmimage-new-version",
+    "chapter": "ch14.html",
+    "claim": "Every CreateMicrovmImage call doesn't overwrite the previous image; it produces a new, numbered version.",
+    "category": "api-syntax",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-imageversion-field",
+    "chapter": "ch14.html",
+    "claim": "RunMicrovm's real response includes an imageVersion field directly, e.g. \"imageVersion\": \"11.0\".",
+    "category": "api-syntax",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-updatemicrovmimage-no-migrate",
+    "chapter": "ch14.html",
+    "claim": "UpdateMicrovmImage and UpdateMicrovmImageVersion exist for changing an image's configuration after the fact, but neither one silently migrates already-running MicroVMs to a new version.",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-listmicrovmimagebuilds-required-param",
+    "chapter": "ch14.html",
+    "claim": "ListMicrovmImageBuilds requires --image-version as a required parameter, not just an image identifier.",
+    "category": "api-syntax",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-no-autoscaling-no-metrics",
+    "chapter": "ch14.html",
+    "claim": "Lambda MicroVMs has no autoscaling group, no target-tracking policy, and no dedicated CloudWatch metrics namespace to drive one.",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-cli-default-retry-adaptive",
+    "chapter": "ch14.html",
+    "claim": "The AWS CLI itself already retries transient errors on most API calls by default (adaptive retry mode with exponential backoff).",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "DISPUTED"
+  },
+  {
+    "id": "ch14-8-hour-limit-28800",
+    "chapter": "ch14.html",
+    "claim": "maximumDurationInSeconds defaults to 28800 seconds, which is exactly 8 hours, confirmed on a real RunMicrovm response.",
+    "category": "default-value",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-idle-vs-maxduration-independent",
+    "chapter": "ch14.html",
+    "claim": "maxIdleDurationSeconds and maximumDurationInSeconds are independent limits: a MicroVM can be auto-suspended for idleness and separately still hits the hard 8-hour ceiling regardless of suspended time.",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
+  },
+  {
+    "id": "ch14-paramvalidation-idlepolicy-error",
+    "chapter": "ch14.html",
+    "claim": "Chapter 5's research surfaced a real ParamValidation error (a missing idlePolicy field) that looks like it needs a retry but actually needs a code fix.",
+    "category": "gotcha",
+    "citation": null,
+    "verdict": "CONFIRMED"
   }
 ]

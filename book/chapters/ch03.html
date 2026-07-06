@@ -88,7 +88,7 @@
         <li>Stores the snapshot for future launches.</li>
       </ol>
 
-      <p>Build logs stream to CloudWatch at <code>/aws/lambda/microvms/&lt;image-name&gt;</code>, so you can debug failed builds the same way you debug any CloudWatch log group.</p>
+      <p>Build logs stream to CloudWatch at <code>/aws/lambda-microvms/&lt;image-name&gt;</code>, so you can debug failed builds the same way you debug any CloudWatch log group.</p>
 
       <p>The snapshot is the key insight. Because the VM is already booted and initialized in the snapshot, launching a new instance from it skips the entire boot sequence. The VM resumes from the snapshot in the same way your laptop resumes from sleep: memory contents, disk state, and process trees are all intact from the moment the snapshot was taken.</p>
 
