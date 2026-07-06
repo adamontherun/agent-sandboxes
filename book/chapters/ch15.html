@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 15 &middot; AI Coding Assistant Pattern &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="How coding assistants use sandboxes, a read-eval-print loop against a simulated MicroVM boundary, managing long development sessions, state preservation for incremental builds, and integration with LLM tool calling. Chapter 15 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part V &middot; Real-World Agent Systems.">
+<meta name="keywords" content="agent sandbox, microvm, lambda, ai coding assistant, claude code, cursor, repl, tool calling, long-running sessions, state preservation">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch15.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 15 &middot; AI Coding Assistant Pattern &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:description" content="How coding assistants use sandboxes, a read-eval-print loop against a simulated MicroVM boundary, managing long development sessions, state preservation for incremental builds, and integration with LLM tool calling.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch15.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 15 &middot; AI Coding Assistant Pattern">
+<meta name="twitter:description" content="How coding assistants use sandboxes, a read-eval-print loop against a simulated MicroVM boundary, managing long development sessions, state preservation for incremental builds, and integration with LLM tool calling.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 15,
+  "name": "AI Coding Assistant Pattern",
+  "description": "How coding assistants use sandboxes, a read-eval-print loop against a simulated MicroVM boundary, managing long development sessions, state preservation for incremental builds, and integration with LLM tool calling.",
+  "url": "{{PAGES_URL}}chapters/ch15.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch14.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch16.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html"><span class="ch-num">7</span>Networking and Egress Control</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Storage and State</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>File System Isolation</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Resource Limits and Quotas</a></li>
+      </ol>
+      <p class="part-label">Part IV &middot; Advanced Patterns</p>
+      <ol start="11">
+        <li><a href="ch11.html"><span class="ch-num">11</span>Multi-Tenant Isolation</a></li>
+        <li><a href="ch12.html"><span class="ch-num">12</span>Security Hardening</a></li>
+        <li><a href="ch13.html"><span class="ch-num">13</span>Observability and Debugging</a></li>
+        <li><a href="ch14.html"><span class="ch-num">14</span>Production Patterns</a></li>
+      </ol>
+      <p class="part-label">Part V &middot; Real-World Agent Systems</p>
+      <ol start="15">
+        <li><a href="ch15.html" class="current"><span class="ch-num">15</span>AI Coding Assistant Pattern</a></li>
+        <li><a href="ch16.html"><span class="ch-num">16</span>Security Testing Sandbox</a></li>
+        <li><a href="ch17.html"><span class="ch-num">17</span>Beyond Lambda MicroVMs</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 15</p>
+        <h1>AI Coding Assistant Pattern</h1>
+        <p class="subtitle">Everything so far has been about the sandbox as infrastructure: launching it, securing it, watching it, keeping it running. This chapter looks at the specific shape an AI coding assistant asks that infrastructure to take &mdash; a persistent workspace an LLM drives turn by turn, writing files, running commands, and reading the results back, for as long as a development session lasts.</p>
+      </header>
+
+      <section id="how-assistants-use-sandboxes">
+        <h2>How Tools Like Claude Code and Cursor Use Sandboxes</h2>
+
+        <p>AWS frames this directly as one of the use cases Lambda MicroVMs was built for. The service's own product page lists "AI-powered development tools generate and execute code on behalf of users" under an "AI coding assistants and agent sandboxes" section, and describes the value proposition as "a separate execution boundary per task: an isolated compute environment with no access to agent state and no shared state across users." <a href="https://aws.amazon.com/lambda/lambda-microvms/" target="_blank" rel="noopener">The product page</a> doesn't name specific products, and neither does the <a href="https://aws.amazon.com/blogs/aws/run-isolated-sandboxes-with-full-lifecycle-control-aws-lambda-introduces-microvms/" target="_blank" rel="noopener">launch announcement</a>, which groups "AI coding assistants" alongside "interactive code environments, data analytics platforms, vulnerability scanners, and game servers that run user-supplied scripts" as instances of the same underlying pattern: something needs to run arbitrary, possibly untrusted code on a user's behalf, in an environment isolated from every other user's.</p>
+
+        <p>What does get documented in public, specifically, is how Claude Code isolates the shell commands it runs locally. <a href="https://code.claude.com/docs/en/sandboxing" target="_blank" rel="noopener">Claude Code's own sandboxing docs</a> describe a Bash-tool sandbox built into the CLI that enforces filesystem and network boundaries at the OS level &mdash; Seatbelt on macOS, <a href="https://github.com/containers/bubblewrap" target="_blank" rel="noopener">bubblewrap</a> on Linux and WSL2 &mdash; restricting writes to the working directory and a session temp directory by default, and routing network access through a proxy that only allows domains you've approved. That's a real, citable architecture, but it's worth being precise about what it is: OS-level process sandboxing on the machine Claude Code is already running on, not a MicroVM. It solves a different part of the same problem this book has been building toward &mdash; keeping a shell command from touching more of the filesystem or network than it needs to &mdash; using primitives closer to a container boundary than a virtual machine.</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888;&#65039; Gotcha</span>
+          <p>Don't conflate "Claude Code has a documented local sandbox" with "Claude Code's cloud execution runs on Lambda MicroVMs specifically." The two facts are both true and both citable, but they answer different questions: one is about a CLI process's isolation on your machine, the other is about which infrastructure a hosted execution environment happens to use. No public source in this book's research confirms the internal infrastructure choice behind any specific hosted coding-assistant product's remote execution feature (Claude Code's own remote/cloud environments, Cursor's background agents, or similar). That's a real gap in what's publicly documented, not a detail this book is choosing to omit.</p>
+        </aside>
+
+        <p>What's genuinely well-documented, and what carries forward into the rest of this chapter, is the general pattern one level up from any single vendor's implementation: a coding assistant sandbox generally needs (1) a persistent workspace that outlives any single tool call, (2) a way to execute commands and capture their output in a form the LLM can read, and (3) some boundary limiting what that execution can touch on the host or the network. Chapters 7, 9, 11, and 13 already built each of those pieces against the real Lambda MicroVMs API: code execution, filesystem persistence, per-tenant isolation, and observability. This chapter's job is showing how they compose into one loop, not re-deriving any of them from scratch.</p>
+      </section>
+
+      <section id="repl-in-a-microvm">
+        <h2>Read-Eval-Print-Loop in a MicroVM</h2>
+
+        <p>An AI coding assistant's core loop looks a lot like a REPL, except the thing typing at the prompt is an LLM instead of a human: write a file, run a command, read the output, decide what to do next, repeat. Each of those steps is a tool call the model issues and a result the sandbox returns.</p>
+
+        <p><code>examples/ch15_repl_session.py</code> demonstrates this loop against a <code>Session</code> object. To be explicit about what this is: <strong>this is a local simulation of a MicroVM boundary, not an actual MicroVM.</strong> <code>Session</code> wraps an ordinary temp directory on this machine, and <code>run_command</code> shells out via <code>subprocess</code> scoped to that directory &mdash; there's no <code>RunMicrovm</code> call, no Firecracker, no real VM isolation anywhere in this script. The point is to show the shape of the loop cheaply, without an AWS account, before wiring the same shape onto the real API calls Chapters 4-6 covered.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch15_repl_session.py &mdash; the Session class</figcaption>
+          <pre><code class="language-python">class Session:
+    def __init__(self) -&gt; None:
+        self._tmpdir = tempfile.TemporaryDirectory(prefix="ch15-session-")
+        self.root = Path(self._tmpdir.name).resolve()
+
+    def write_file(self, path: str, content: str) -&gt; ToolResult: ...
+    def read_file(self, path: str) -&gt; ToolResult: ...
+    def run_command(self, command: str, timeout: float = 10.0) -&gt; ToolResult: ...</code></pre>
+        </figure>
+
+        <p>Running the script drives a small multi-turn session &mdash; write a script with a bug, run it, watch it fail, fix it, run it again, then read the file back to confirm what's actually on disk. This is real, captured output from actually running the script, not an invented transcript:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">examples/ch15_repl_session.py &mdash; real output from running this script locally</figcaption>
+          <pre><code class="language-text">=== Turn 1: write a script ===
+  write_file -&gt; ok=True wrote 15 bytes to add.py
+
+=== Turn 2: run it (expect failure) ===
+  run_command -&gt; ok=False exit_code=1
+  stderr:
+    Traceback (most recent call last):
+      File "/private/var/folders/.../add.py", line 1, in &lt;module&gt;
+        print(1 + '2')
+              ~~^~~~~
+    TypeError: unsupported operand type(s) for +: 'int' and 'str'
+
+=== Turn 3: fix the bug ===
+  write_file -&gt; ok=True wrote 20 bytes to add.py
+
+=== Turn 4: run it again (expect success) ===
+  run_command -&gt; ok=True exit_code=0
+  stdout: '3'
+
+=== Turn 5: read the file back (state preservation check) ===
+  read_file -&gt; ok=True
+  content: "print(1 + int('2'))\n"
+
+=== Turn 6: reject a path that escapes the session root ===
+  write_file -&gt; raised ValueError: path escapes session root: ../escape.py
+
+=== Done ===</code></pre>
+        </figure>
+
+        <p>Notice Turn 2's failure never breaks the loop &mdash; the assistant sees the traceback as a normal tool result, the same way it sees success, and decides what to do next from that. That's the entire point of shaping results as structured data (<code>ToolResult</code>'s <code>ok</code>/<code>output</code>/<code>detail</code> fields) rather than letting a failing command raise an exception the caller has to catch: a REPL loop driven by an LLM needs every outcome, including failures, to come back as something the model can read and reason about in its next turn.</p>
+
+        <p>Turn 6 is the one line in <code>_resolve()</code> standing in for a real sandbox's filesystem boundary: it rejects any path that would resolve outside the session root, the same property Chapter 9 covered for a real MicroVM's filesystem isolation, just enforced here in a single Python check instead of an OS-level mount boundary. On a real MicroVM, that boundary would instead be the isolated filesystem Chapter 9 described, not application code checking path prefixes &mdash; this simulation substitutes the cheaper check because there's no real VM boundary to lean on here.</p>
+      </section>
+
+      <section id="long-running-sessions">
+        <h2>Managing Long-Running Development Sessions</h2>
+
+        <p>A single coding-assistant conversation can span dozens or hundreds of tool calls over an extended period &mdash; not one request-response cycle, but a session that keeps a workspace alive across many turns while the user (or the model, working autonomously) iterates. Every constraint Chapter 14 covered for a production orchestrator applies directly here, just from the session's point of view instead of the fleet's:</p>
+
+        <ul>
+          <li>The 8-hour <code>maximumDurationInSeconds</code> ceiling (confirmed on a real <code>RunMicrovm</code> response in this course's own research, see Chapter 5) is a hard stop a long development session can actually hit. A session that runs long enough needs the same checkpoint-and-handoff pattern Chapter 14 described for any long-running MicroVM workload: persist what matters, then launch a fresh instance rather than discovering mid-task that the old one was terminated.</li>
+          <li>Chapter 6 and 13's auto-suspend knobs (<code>maxIdleDurationSeconds</code>, <code>suspendedDurationSeconds</code>, <code>autoResumeEnabled</code>) matter more here than almost anywhere else in this book, because a coding-assistant session has genuinely idle stretches &mdash; the time between the user reading a response and typing the next message, or between an autonomous agent's tool call and the model's next decision. Suspending during those gaps and resuming on the next tool call is exactly the cost lever Chapter 6 described, applied to a workload that's idle by nature rather than idle by accident.</li>
+          <li>Chapter 11's multi-tenant framing (one MicroVM per user vs. shared MicroVMs) becomes a per-conversation decision instead of a per-user one: does each coding session get its own dedicated instance, or do multiple sessions share one, cleaned between them? A coding assistant that lets a user run arbitrary shell commands is a strong argument for the dedicated-instance side of that tradeoff &mdash; the same reasoning Chapter 11 already laid out for any workload where state leaking between tenants would be a real security problem, not just a UX bug.</li>
+        </ul>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>A turn budget &mdash; a hard cap on how many tool calls one session gets before it must checkpoint or terminate &mdash; is a cheap first line of defense against a session that's stuck in a loop, independent of and complementary to the 8-hour wall-clock limit. The challenge below implements exactly this as <code>ToolCallRouter.max_turns</code>.</p>
+        </aside>
+      </section>
+
+      <section id="state-preservation">
+        <h2>State Preservation for Incremental Builds</h2>
+
+        <p>The entire premise of a coding-assistant sandbox is that "run this code" isn't a stateless operation the way it might be in Chapter 7's basic executor &mdash; the point of an incremental build is that files written in turn 3 are still there in turn 30. Chapter 3 already established that a Lambda MicroVM's disk, memory, and processes persist across a suspend/resume cycle; Chapter 9 covered the filesystem-isolation mechanics of that persistent disk in more depth. This chapter doesn't re-derive either &mdash; it's the direct beneficiary of both.</p>
+
+        <p><code>examples/ch15_repl_session.py</code>'s Turn 5 is a deliberately small proof of the same property: the file written and then rewritten in earlier turns is still readable, byte for byte, in a later turn, on the same <code>Session</code> object. On a real MicroVM this is the disk surviving a suspend/resume cycle exactly as Chapter 3 described; in this local simulation it's just a temp directory that happens to still exist because nothing deleted it &mdash; a much weaker guarantee, worth naming honestly rather than implying the simulation proves anything about the real service's persistence behavior.</p>
+
+        <p>Incremental builds specifically benefit from this in a way that's worth naming: a compiler's cache, a package manager's downloaded dependencies (Chapter 8's territory), and a test runner's coverage data all get slower or need to be rebuilt from scratch if the workspace resets between turns. A coding assistant that has to reinstall dependencies on every single tool call isn't just slow &mdash; it's fighting the exact persistence guarantee the underlying MicroVM already provides for free.</p>
+      </section>
+
+      <section id="tool-calling-integration">
+        <h2>Integration with LLM Tool Calling</h2>
+
+        <p>Everything upstream of the sandbox is an LLM API's tool-calling mechanism: the model is given a list of available tools (typically named something like <code>write_file</code>, <code>read_file</code>, <code>run_command</code>) with a schema for each one's arguments, and instead of returning plain text, the model's response can request a call to one of them. The caller executes that call against whatever real system backs it &mdash; here, the sandbox &mdash; and returns the result as a new message in the conversation, and the loop continues.</p>
+
+        <p>This chapter doesn't attempt to describe Anthropic's or any other vendor's exact tool-calling wire format, since that's the kind of implementation detail that's genuinely well-documented in each vendor's own API reference and would only go stale here. The pattern this chapter's code demonstrates is the part that stays the same regardless of which API sits on top of it: a router that takes a structured tool call, dispatches it to the right sandbox method, and returns a plain-dict result shaped for feeding straight back into a conversation.</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">the dispatch shape (see challenges/ch15.py for the full task)</figcaption>
+          <pre><code class="language-python">class ToolCallRouter:
+    def dispatch(self, call: ToolCall) -&gt; dict:
+        ...
+        if call.name == "write_file":
+            result = self.sandbox.write_file(**call.arguments)
+        elif call.name == "read_file":
+            result = self.sandbox.read_file(**call.arguments)
+        elif call.name == "run_command":
+            result = self.sandbox.run_command(**call.arguments)
+        else:
+            raise ValueError(f"unknown tool: {call.name}")
+
+        return {"tool": call.name, "ok": result.ok, "output": result.output}</code></pre>
+        </figure>
+
+        <p>Two things about this shape matter more than the specific method names. First, the router raises on an unrecognized tool name rather than silently no-op'ing &mdash; a model hallucinating a tool that doesn't exist is a real, common failure mode, and surfacing it as an explicit error the model can see and correct from is far better than a call that appears to succeed but did nothing. Second, the dict this returns is deliberately minimal and JSON-shaped: whatever downstream code turns this into the specific tool-result message format a given LLM API expects, it's working from plain data, not from a <code>ToolResult</code> dataclass instance it would need to know how to serialize.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>Claude Code's own sandboxing docs note that "subagents run in the same process as the parent session and use the same sandbox configuration" &mdash; confirming that in that specific product, tool-calling and sandbox enforcement are handled at different layers of the same running process, not two separate systems bolted together after the fact. That's consistent with the general shape this chapter's router demonstrates: the LLM-facing tool-calling layer and the sandbox-enforcement layer are separable concerns that still need to agree on the same boundary.</p>
+        </aside>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Build a Minimal AI Code Assistant</h2>
+
+        <p>Your challenge is to implement the piece this chapter's prose described but left as an exercise: a <code>ToolCallRouter</code> that dispatches structured tool calls against a sandbox and enforces a turn budget for a long-running session.</p>
+
+        <p>Open <code>challenges/ch15.py</code> and implement <code>ToolCallRouter</code>:</p>
+
+        <ul>
+          <li><code>__init__(sandbox, max_turns=20)</code> &mdash; stores the sandbox and turn budget; starts <code>turns_used</code> at 0.</li>
+          <li><code>dispatch(call)</code> &mdash; increments <code>turns_used</code>; raises <code>TurnBudgetExceeded</code> if that exceeds <code>max_turns</code> (before doing anything else); otherwise routes <code>call.name</code> to the matching sandbox method (<code>write_file</code>, <code>read_file</code>, <code>run_command</code>), raising <code>ValueError</code> for anything else, and returns a <code>{"tool": ..., "ok": ..., "output": ...}</code> dict.</li>
+          <li><code>remaining_turns()</code> &mdash; returns how many turns are left in the budget.</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges &amp;&amp; python3 -m pytest ch15_test.py -v</code></pre>
+
+        <p>Twelve tests cover routing for each tool, an unknown-tool error, and every turn-budget edge case, including that the call which exceeds the budget is never dispatched. See <code>solutions/ch15.py</code> when you're ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>Run <code>examples/ch15_repl_session.py</code> first to see the full read-eval-print loop &mdash; write, fail, fix, succeed, read back, and a rejected path-escape attempt &mdash; against the local <code>Session</code> simulation, entirely offline. Then implement the challenge's <code>ToolCallRouter</code> to see how the same kind of sandbox plugs into an LLM's tool-calling loop.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch14.html">Chapter 14: Production Patterns</a>
+        <a class="next" href="ch16.html">Chapter 16: Security Testing Sandbox</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>

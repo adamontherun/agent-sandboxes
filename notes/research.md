@@ -539,3 +539,86 @@ chapters already captured and verified live against the `poc` account:
   explicitly in the chapter text as an orchestration pattern built from
   those primitives, not a restatement of an AWS-documented feature — Lambda
   MicroVMs has no built-in blue/green or autoscaling primitive of its own.
+
+## Chapter 15 (AI Coding Assistant Pattern) research
+
+### AWS's own framing of AI coding assistants as a Lambda MicroVMs use case
+
+Fetched `https://aws.amazon.com/lambda/lambda-microvms/` directly (2026-07-06)
+and confirmed an "AI coding assistants and agent sandboxes" section stating:
+"AI-powered development tools generate and execute code on behalf of users,"
+with the value proposition described as "a separate execution boundary per
+task: an isolated compute environment with no access to agent state and no
+shared state across users." No specific product (Claude Code, Cursor, GitHub
+Copilot Workspace) is named on this page.
+
+Also fetched the launch announcement,
+`https://aws.amazon.com/blogs/aws/run-isolated-sandboxes-with-full-lifecycle-control-aws-lambda-introduces-microvms/`
+(already in this file's Official Sources list) and confirmed it groups "AI
+coding assistants" alongside "interactive code environments, data analytics
+platforms, vulnerability scanners, and game servers that run user-supplied
+scripts" as one sentence, again without naming a specific product.
+
+**Important gap, stated explicitly rather than papered over**: no public
+source found during this chapter's research confirms that any specific
+hosted AI coding-assistant product's *cloud/remote* execution feature (e.g.
+Claude Code's remote environments, Cursor's background agents) actually runs
+on AWS Lambda MicroVMs internally, or on Firecracker directly, or on
+anything else. AWS's own materials describe the use case category, not a
+named customer's implementation. Chapter 15 states this gap explicitly
+rather than implying a connection that isn't sourced.
+
+### Claude Code's documented local sandbox (a different, but real and citable, architecture)
+
+Fetched `https://code.claude.com/docs/en/sandboxing` live (2026-07-06,
+redirected from `docs.claude.com/en/docs/claude-code/sandboxing` with a 301 —
+the doc has moved hosts). Confirmed real, current detail:
+
+- The sandboxed Bash tool is built into Claude Code and enforces filesystem
+  and network isolation at the OS level for shell commands and their child
+  processes.
+- macOS uses the built-in Seatbelt framework; Linux and WSL2 use
+  [bubblewrap](https://github.com/containers/bubblewrap) (confirmed live,
+  200) for filesystem isolation plus `socat` for the network relay.
+- Default write access is scoped to the working directory and the session
+  temp directory (`$TMPDIR`); default read access is broad (the whole
+  filesystem except denied paths), which is itself flagged in the docs as a
+  reason to separately configure `sandbox.credentials` for files like
+  `~/.aws/credentials` and `~/.ssh/`.
+- Network access goes through a proxy with no domains pre-allowed by
+  default; the first request to a new domain prompts for approval.
+- "Subagents run in the same process as the parent session and use the same
+  sandbox configuration" — confirms tool-calling and sandbox enforcement
+  share one process/config in this specific product.
+
+**Framing decision for Chapter 15**: this is real and citable, but it is OS-
+level process sandboxing on the machine Claude Code already runs on (Seatbelt/
+bubblewrap), not a MicroVM/VM boundary. The chapter states this distinction
+explicitly rather than implying Claude Code's local sandbox is evidence about
+Lambda MicroVMs or Firecracker specifically.
+
+### Cursor — no public infrastructure detail found
+
+Attempted `https://cursor.com/blog/background-agents` (404, page doesn't
+exist at that path), `https://cursor.com/blog/agent-web` (200, but content is
+about UX/accessibility of background agents, not infrastructure — no
+mention of VMs, containers, or sandboxing internals), and
+`https://docs.cursor.com/background-agent` (redirects to `cursor.com/docs`,
+a docs homepage with no specific infrastructure content surfaced). No public
+source was found describing Cursor's background-agent execution environment
+at an infrastructure level. Chapter 15 does not make any specific claim
+about Cursor's internal architecture as a result — it's named only in the
+generic "tools like Claude Code and Cursor" framing that AWS's own materials
+use for the use-case category, not with any product-specific architecture
+claim attached.
+
+### Example script and challenge
+
+`examples/ch15_repl_session.py`, `challenges/ch15.py`, and `solutions/ch15.py`
+are original to Chapter 15, not sourced from an external doc. The chapter
+text and the script's own docstring both state explicitly that `Session` is
+a local simulation (a temp directory plus scoped `subprocess` calls) of a
+MicroVM boundary, not a real VM — consistent with how Chapter 11's
+`MockMicrovmClient` and Chapter 14's `BlueGreenOrchestrator` example already
+handled the same "simulate the API shape, not the network" pattern for
+scenarios that don't need a live AWS call to teach the point.
