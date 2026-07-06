@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ch 7 &middot; Executing Untrusted Code &mdash; Building Agent Sandboxes with AWS Lambda MicroVMs</title>
+<meta name="description" content="Design a code execution endpoint that writes, runs, and cleans up untrusted snippets under a timeout. Chapter 7 of Building Agent Sandboxes with AWS Lambda MicroVMs, Part III &middot; Building the Sandbox.">
+<meta name="keywords" content="agent sandbox, microvm, code execution, subprocess timeout, resource limits, security boundaries">
+<meta name="author" content="">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{{PAGES_URL}}chapters/ch07.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Building Agent Sandboxes with AWS Lambda MicroVMs">
+<meta property="og:title" content="Ch 7 &middot; Executing Untrusted Code">
+<meta property="og:description" content="Design a code execution endpoint that writes, runs, and cleans up untrusted snippets under a timeout.">
+<meta property="og:url" content="{{PAGES_URL}}chapters/ch07.html">
+<meta property="og:image" content="{{OG_IMAGE_URL}}">
+<meta property="og:image:width" content="{{OG_IMAGE_WIDTH}}">
+<meta property="og:image:height" content="{{OG_IMAGE_HEIGHT}}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ch 7 &middot; Executing Untrusted Code">
+<meta name="twitter:description" content="Design a code execution endpoint that writes, runs, and cleans up untrusted snippets under a timeout.">
+<meta name="twitter:image" content="{{OG_IMAGE_URL}}">
+<meta name="theme-color" content="{{BRAND_HEX_WITH_HASH}}">
+<script>document.documentElement.dataset.theme=localStorage.getItem("book-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");</script>
+<link rel="stylesheet" href="../assets/style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Chapter",
+  "position": 7,
+  "name": "Executing Untrusted Code",
+  "description": "Design a code execution endpoint that writes, runs, and cleans up untrusted snippets under a timeout.",
+  "url": "{{PAGES_URL}}chapters/ch07.html",
+  "image": "{{OG_IMAGE_URL}}",
+  "inLanguage": "en",
+  "isPartOf": {"@type": "Course", "name": "Building Agent Sandboxes with AWS Lambda MicroVMs", "url": "{{PAGES_URL}}"},
+  "previousItem": "{{PAGES_URL}}chapters/ch06.html",
+  "nextItem": "{{PAGES_URL}}chapters/ch08.html"
+}
+</script>
+</head>
+<body>
+<div class="book">
+  <aside class="sidebar">
+    <a class="brand" href="../index.html">Building Agent Sandboxes <span class="accent">with AWS Lambda MicroVMs</span></a>
+    <p class="tagline">Hardware-level isolation for AI agents</p>
+    <div class="sidebar-links">
+      <a class="codespace-link" href="{{CODESPACES_URL}}" target="_blank" rel="noopener">&#9654; Launch Codespace</a>
+      <a class="repo-link" href="{{REPO_URL}}" target="_blank" rel="noopener">GitHub repo &#8599;</a>
+    </div>
+    <nav aria-label="Chapters">
+      <p class="part-label">Part I &middot; Foundations</p>
+      <ol>
+        <li><a href="ch01.html"><span class="ch-num">1</span>Why Agent Sandboxes Matter</a></li>
+        <li><a href="ch02.html"><span class="ch-num">2</span>Understanding Firecracker MicroVMs</a></li>
+        <li><a href="ch03.html"><span class="ch-num">3</span>Lambda MicroVMs Architecture</a></li>
+      </ol>
+      <p class="part-label">Part II &middot; Hands-On</p>
+      <ol start="4">
+        <li><a href="ch04.html"><span class="ch-num">4</span>Your First MicroVM Image</a></li>
+        <li><a href="ch05.html"><span class="ch-num">5</span>Launching and Connecting</a></li>
+        <li><a href="ch06.html"><span class="ch-num">6</span>Lifecycle Management</a></li>
+      </ol>
+      <p class="part-label">Part III &middot; Building the Sandbox</p>
+      <ol start="7">
+        <li><a href="ch07.html" class="current"><span class="ch-num">7</span>Executing Untrusted Code</a></li>
+        <li><a href="ch08.html"><span class="ch-num">8</span>Package Management and Dependencies</a></li>
+        <li><a href="ch09.html"><span class="ch-num">9</span>Filesystem and Persistence</a></li>
+        <li><a href="ch10.html"><span class="ch-num">10</span>Networking the Sandbox</a></li>
+      </ol>
+    </nav>
+    <button class="theme-toggle" type="button">&#9790; Dark mode</button>
+  </aside>
+  <button class="menu-btn" type="button" aria-label="Toggle chapter list">&#9776; Chapters</button>
+  <main>
+    <article>
+
+      <header>
+        <p class="chapter-label">Chapter 7</p>
+        <h1>Executing Untrusted Code</h1>
+        <p class="subtitle">Receive a snippet, run it, get the output back &mdash; and understand exactly which layer is stopping it from doing something worse.</p>
+      </header>
+
+      <section id="intro">
+        <h2>The shape of a code execution endpoint</h2>
+
+        <p>Everything in Part II got you a running MicroVM with a live endpoint. This chapter is about what that endpoint actually does when it is the backing service for an AI agent: accept a code snippet over HTTP, run it, and hand back what happened. Strip away the AWS-specific plumbing and the pattern is the same one every "run this for me" sandbox uses:</p>
+
+        <ol>
+          <li>Receive the snippet in a request body.</li>
+          <li>Write it to a file.</li>
+          <li>Execute that file in a subprocess, with a timeout.</li>
+          <li>Capture stdout, stderr, and the exit code.</li>
+          <li>Clean up the file, regardless of how execution went.</li>
+        </ol>
+
+        <p>None of these five steps is specific to Lambda MicroVMs. You could run this exact Flask app on a laptop, in a Docker container, or inside a MicroVM, and the code would not change. What changes is what surrounds it &mdash; and that is the part worth being precise about, because it is easy to write an endpoint like this and quietly assume it is "sandboxed" when the sandboxing is actually coming from somewhere else entirely (or from nowhere).</p>
+
+        <aside class="callout gotcha">
+          <span class="callout-title">&#9888; Gotcha</span>
+          <p>This chapter's example script runs on a local dev machine, not inside a real MicroVM &mdash; there is no AWS account interaction here, unlike Chapters 4&ndash;6. The subprocess-level isolation shown below is real and testable locally, but it is not the security boundary. Read the "What the MicroVM actually isolates" section before assuming this endpoint alone is safe to expose to untrusted users.</p>
+        </aside>
+      </section>
+
+      <section id="endpoint-design">
+        <h2>Designing the endpoint</h2>
+
+        <p>A minimal execution endpoint takes a JSON body with the code to run and an optional timeout, and returns what came out the other side:</p>
+
+        <pre><code class="language-python">@app.post("/execute")
+def execute_endpoint():
+    """POST {"code": "...", "timeout_seconds": 5} -&gt; execution result."""
+    payload = request.get_json(force=True, silent=True) or {}
+    code = payload.get("code", "")
+    timeout_seconds = float(payload.get("timeout_seconds", 5.0))
+
+    if not code:
+        return jsonify({"error": "missing 'code' field"}), 400
+
+    result = execute_snippet(code, timeout_seconds=timeout_seconds)
+    return jsonify({
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "exit_code": result.exit_code,
+        "timed_out": result.timed_out,
+        "duration_seconds": result.duration_seconds,
+    })</code></pre>
+
+        <p>The interesting work is in <code>execute_snippet</code>, not the route handler. The route handler's job is small on purpose: parse the request, reject an obviously bad one, delegate, and serialize the result. Keeping the HTTP layer thin makes the execution logic testable without spinning up Flask at all &mdash; which is exactly what this chapter's challenge does.</p>
+      </section>
+
+      <section id="write-execute-capture">
+        <h2>Writing to disk, executing, capturing output</h2>
+
+        <p>The full <code>execute_snippet</code> function writes the incoming code to a temp file, runs it with <code>subprocess.run</code>, and captures everything that comes back:</p>
+
+        <pre><code class="language-python">def execute_snippet(code: str, timeout_seconds: float = 5.0) -&gt; ExecutionResult:
+    workdir = Path(tempfile.mkdtemp(prefix="ch07-exec-"))
+    script_path = workdir / f"{uuid.uuid4().hex}.py"
+    script_path.write_text(code)
+
+    started = time.monotonic()
+    timed_out = False
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            cwd=workdir,
+        )
+        stdout, stderr, exit_code = proc.stdout, proc.stderr, proc.returncode
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        stdout = exc.stdout or ""
+        stderr = (exc.stderr or "") + "\n[execution timed out]"
+        exit_code = None
+    finally:
+        duration = time.monotonic() - started
+        script_path.unlink(missing_ok=True)
+        workdir.rmdir()
+
+    return ExecutionResult(stdout=stdout, stderr=stderr, exit_code=exit_code,
+                            timed_out=timed_out, duration_seconds=round(duration, 3))</code></pre>
+
+        <p>A few details worth calling out explicitly:</p>
+
+        <ul>
+          <li>Each snippet gets its own temp directory and a UUID-named file, not a shared path. Two concurrent requests never collide, and there is no snippet left over from a previous request for the next one to accidentally read.</li>
+          <li>The <code>finally</code> block deletes the script and its directory whether the process succeeded, crashed, or timed out. Cleanup that only runs on the happy path is not cleanup.</li>
+          <li><code>cwd=workdir</code> means a snippet that does something like <code>open("output.txt", "w")</code> writes into the disposable temp directory, not wherever the Flask process happens to be running from.</li>
+        </ul>
+
+        <p>Running this against a small battery of snippets produces real, captured output:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">python3 examples/ch07_code_executor.py (real output)</figcaption>
+          <pre><code class="language-text">Snippet: hello world
+exit_code:   0
+timed_out:   False
+duration_s:  0.017
+stdout:      'hello from inside the sandbox'
+stderr:      ''
+
+Snippet: writes to stderr
+exit_code:   0
+timed_out:   False
+duration_s:  0.015
+stdout:      'done anyway'
+stderr:      'warning: something noisy'
+
+Snippet: a crash
+exit_code:   1
+timed_out:   False
+duration_s:  0.021
+stdout:      ''
+stderr:      'Traceback (most recent call last):\n  File "...", line 1, in &lt;module&gt;\n    raise ValueError(\'this snippet intentionally throws\')\nValueError: this snippet intentionally throws'</code></pre>
+        </figure>
+
+        <p>Note the crash case: a Python traceback lands in <code>stderr</code> with a normal nonzero exit code. That is not a bug in the executor &mdash; it is exactly what should happen. The endpoint's job is to report what the snippet did, including "it threw an exception," not to prevent every possible failure inside the snippet.</p>
+      </section>
+
+      <section id="timeouts">
+        <h2>Timeout handling and resource limits</h2>
+
+        <p>The most important line in <code>execute_snippet</code> is easy to skim past: <code>timeout=timeout_seconds</code> on the <code>subprocess.run</code> call. Python's own documentation is precise about what this does: <a href="https://docs.python.org/3/library/subprocess.html" target="_blank" rel="noopener">if the timeout expires, the child process is killed and waited for, and <code>TimeoutExpired</code> is re-raised after the child has actually terminated</a>. That guarantee &mdash; the process is dead before your code continues &mdash; is what makes an infinite loop a non-event instead of a leaked runaway process:</p>
+
+        <figure class="codeblock">
+          <figcaption class="code-label">python3 examples/ch07_code_executor.py &mdash; infinite loop snippet (real output)</figcaption>
+          <pre><code class="language-text">Snippet: an infinite loop
+Code:
+while True:
+    pass
+
+exit_code:   None
+timed_out:   True
+duration_s:  1.003
+stdout:      ''
+stderr:      '[execution timed out]'</code></pre>
+        </figure>
+
+        <p>A one-second timeout was passed for this snippet specifically (the rest use the five-second default); the measured duration of 1.003s confirms the kill happened right at the boundary, not some arbitrary amount of time later. <code>exit_code</code> comes back <code>None</code> because the process was killed rather than exiting on its own &mdash; that is the caller's signal to distinguish "the code returned a nonzero status" from "the code never returned at all."</p>
+
+        <p>A wall-clock timeout is necessary but not sufficient. <code>subprocess.run</code>'s timeout stops a snippet from running forever; it does nothing about a snippet that allocates memory until the host falls over, forks child processes it never cleans up, or opens far more file descriptors than it needs. Those require resource limits, not just a clock &mdash; which is exactly the gap a MicroVM (or, on a self-managed Firecracker host, the jailer) closes rather than the application code.</p>
+
+        <aside class="callout underhood">
+          <span class="callout-title">&#128300; Under the hood</span>
+          <p>On a self-hosted Firecracker deployment, per-instance resource limits are enforced through cgroups &mdash; <code>memory.limit_in_bytes</code> for memory, <code>cpu.cfs_quota_us</code> for CPU share, and <code>blkio.throttle.io_serviced</code> for disk I/O &mdash; plus the jailer's own <code>fsize</code> limit on file size, applied via <code>setrlimit()</code>. Lambda MicroVMs manage this for you: the memory, vCPU, and disk figures you set at image build time are the resource ceiling the platform enforces, not a suggestion your application code has to police itself.</p>
+        </aside>
+      </section>
+
+      <section id="security-boundaries">
+        <h2>Security boundaries: what the MicroVM isolates</h2>
+
+        <p>This is the question the chapter's opening gotcha promised to answer: if <code>subprocess.run</code> with a timeout is not the security boundary, what is?</p>
+
+        <p>Firecracker's own project page is explicit that a MicroVM is not just a process-level sandbox: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">"Firecracker microVMs use KVM-based virtualizations that provide enhanced security over traditional VMs."</a> KVM-based virtualization means the untrusted code is running behind actual hardware virtualization support, the same category of isolation that separates one cloud customer's EC2 instance from another's on the same physical host &mdash; not merely a different Linux user, not a different container namespace, a different virtual machine with its own kernel.</p>
+
+        <p>Firecracker adds a second layer on top of that hardware boundary. The project describes a companion program, the jailer, that wraps each microVM with conventional Linux sandboxing on top of the virtualization: <a href="https://firecracker-microvm.github.io/" target="_blank" rel="noopener">"Each Firecracker microVM is further isolated with common Linux user-space security barriers by a companion program called 'jailer'," which "provides a second line of defense in case the virtualization barrier is ever compromised."</a> Concretely, per the jailer's own design (see Chapter 2's research notes), that means a chroot via <code>pivot_root()</code>, dedicated mount/PID/network namespaces, and a non-privileged uid/gid the Firecracker process runs as after setup &mdash; defense in depth, not a single wall.</p>
+
+        <p>Put together, here is what actually stops a malicious snippet inside a Lambda MicroVM, and what does not:</p>
+
+        <ul>
+          <li><strong>The MicroVM isolates:</strong> the kernel (a MicroVM has its own, not the host's), memory and CPU (enforced by the platform's resource configuration, not by application code), the filesystem (the MicroVM's disk is its own snapshot, not a bind-mount into the host), and process/network namespaces from the host and from other tenants' MicroVMs.</li>
+          <li><strong>The MicroVM does <em>not</em> automatically isolate:</strong> the snippet from other requests running inside the <em>same</em> MicroVM at the same time, or a snippet from a badly-scoped IAM role attached to that MicroVM's execution role. A shared MicroVM serving many users' snippets sequentially still needs application-level cleanup between requests (Chapter 9 covers this); a MicroVM's network egress still reaches wherever its network connectors point unless you've deliberately restricted them (Chapter 8 touched on this for package registries; Chapter 12 covers hardening it further).</li>
+        </ul>
+
+        <p>This chapter's <code>execute_snippet</code> function, running on a local dev machine, gives you exactly the "capture output and enforce a wall-clock timeout" part of that list, and nothing else &mdash; there is no separate kernel here, no memory ceiling, no filesystem boundary beyond ordinary OS file permissions. That is an honest limitation of running this example locally to write and test it quickly; deployed inside a real Lambda MicroVM, the same Flask code gets the rest of the list for free, supplied by the platform underneath it rather than by anything this chapter's Python had to implement.</p>
+
+        <aside class="callout production">
+          <span class="callout-title">&#127981; In production</span>
+          <p>Do not write your own process-isolation logic and call it a sandbox. The value of a MicroVM-backed executor is precisely that the isolation guarantee lives below your application code, where a bug in your Python can't undermine it. If you find yourself adding seccomp filters or namespace tricks inside the code-execution endpoint itself, that is usually a sign the endpoint is running somewhere that isn't actually providing VM-level isolation.</p>
+        </aside>
+      </section>
+
+      <section id="challenge">
+        <h2>Challenge: Build a Python code executor</h2>
+
+        <p>Your challenge is to implement the decision logic behind a code-execution endpoint, factored so it can be tested without spawning real subprocesses. Open <code>challenges/ch07.py</code> and implement:</p>
+
+        <ul>
+          <li><code>validate_request(payload)</code> &mdash; check an incoming request body for a non-empty <code>code</code> string and an optional positive <code>timeout_seconds</code>, returning an error message or <code>None</code>.</li>
+          <li><code>build_command(script_path)</code> &mdash; build the subprocess argv used to run a saved script.</li>
+          <li><code>summarize_result(stdout, stderr, exit_code, timed_out)</code> &mdash; normalize raw subprocess output into an <code>ExecutionResult</code>.</li>
+          <li><code>is_successful(result)</code> &mdash; decide whether an execution counts as successful (exit code 0 and no timeout &mdash; a timeout with a coincidental zero exit code still does not count).</li>
+        </ul>
+
+        <p>Run the tests:</p>
+
+        <pre><code class="language-bash">cd challenges && python3 -m pytest ch07_test.py -v</code></pre>
+
+        <p>The suite has 18 cases across request validation, command construction, result normalization, and the success predicate. See <code>solutions/ch07.py</code> when you are ready to compare.</p>
+
+        <div class="tryit">
+          <h3>&#9889; Try it</h3>
+          <p>The runnable example at <code>examples/ch07_code_executor.py</code> runs a small battery of snippets &mdash; including a crash and an infinite loop &mdash; through a real <code>subprocess</code>-backed executor and prints the captured output, and includes a <code>/execute</code> Flask route showing the HTTP-facing version of the same logic. Run it locally with <code>python3 ch07_code_executor.py</code>; no AWS account needed.</p>
+        </div>
+      </section>
+
+      <nav class="chapter-nav" aria-label="Chapter navigation">
+        <a class="prev" href="ch06.html">Chapter 6: Lifecycle Management</a>
+        <a class="next" href="ch08.html">Chapter 8: Package Management and Dependencies</a>
+      </nav>
+
+    </article>
+  </main>
+</div>
+<script src="../assets/vendor/highlight.min.js"></script>
+<script src="../assets/book.js"></script>
+</body>
+</html>
